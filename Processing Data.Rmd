@@ -1,0 +1,63 @@
+---
+title: "Untitled"
+author: "Ellen"
+date: "1/18/2021"
+output: html_document
+---
+
+
+# Processing data
+
+```{r}
+library("tidyverse")
+
+```
+
+## Process climate data
+
+1) Download [precipitation data](http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/pre) onto your local machine (large files). You will have to either create an account or log in. Download 4 time periods (you want the files with the 'nc' in the name):
+- 1981-1990
+- 1991-2000
+- 2001-2010
+- 2011-2019
+
+```{r setup, include=FALSE}
+sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv')
+localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/CRU"
+  
+### create precipitation data for the 4 distinct time periods
+cruv <- "pre"
+timeframe <- '1981.1990.'
+source("./get-CRU-TS.R")
+
+timeframe <- '1991.2000.'
+source("./get-CRU-TS.R")
+
+timeframe <- '2001.2010.'
+source("./get-CRU-TS.R")
+
+timeframe <- '2011.2019.'
+source("./get-CRU-TS.R")
+```
+
+
+2) Download [temperature data](http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/tmp) onto your local machine (large files). You will have to either create an account or log in. Download 4 time periods (you want the files with the 'nc' in the name):
+- 1981-1990
+- 1991-2000
+- 2001-2010
+- 2011-2019
+```{r temperaturedata, include = F}
+cruv <- 'tmp'
+timeframe <- '1981.1990.'
+source("./get-CRU-TS.R")
+
+timeframe <- '1991.2000.'
+source("./get-CRU-TS.R")
+
+timeframe <- '2001.2010.'
+source("./get-CRU-TS.R")
+
+timeframe <- '2011.2019.'
+source("./get-CRU-TS.R")
+```
+

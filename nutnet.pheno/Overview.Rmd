@@ -1,0 +1,2817 @@
+---
+title: "Nut Net Phenology from Landsat NDVI"
+author: "Ellen"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+# output: html_document
+output: github_document:
+  toc: true
+always_allow_html: true
+urlcolor: blue
+---
+```{r introthings, eval = T, echo = F, message = F, warning = F}
+suppressMessages(library("sf"))
+suppressMessages(library("fasterize"))
+library("rnaturalearth")
+suppressMessages(library("raster"))
+suppressMessages(library("rgdal"))
+suppressMessages(library("car"))
+suppressMessages(library("tidyverse"))
+suppressMessages(library("lubridate"))
+suppressMessages(library("zoo"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("data.table"))
+suppressMessages(library("plotly"))
+suppressMessages(library("kableExtra"))
+suppressMessages(library("readxl"))
+suppressMessages(library("scales"))
+suppressMessages(library("gridExtra"))
+suppressMessages(library("lme4"))
+
+circmean_degrees <- function (x)
+{
+  x_radians <- x * pi / 180
+  sinr <- sum(sin(x_radians))
+  cosr <- sum(cos(x_radians))
+  circmean_radians <- atan2(sinr, cosr)
+  circmean_degree <- circmean_radians / pi * 180
+  circmean_degree
+}
+
+circ_degrees <- function (x)
+{
+  x_radians <- x * pi / 180
+  sinr <- (sin(x_radians))
+  cosr <- (cos(x_radians))
+  circmean_radians <- atan2(sinr, cosr)
+  circmean_degree <- circmean_radians / pi * 180
+  circmean_degree
+}
+```
+
+
+# Overview
+
+Satellite-imagery can be leveraged to tell important and interesting stories about plant vegetation. There are many different satellite missions, run by many different organizations and agencies, of variying spatial resolution, which have been collecting data in some cases for over 50 years. This satellite-derrived information about vegetation can be particularily useful to show how phenology and biomass production have changed over time.
+
+The goal here is to pair satellite imagery with site-level NutNet information. As such, the [USGS Landsat mission](https://www.usgs.gov/core-science-systems/nli/landsat) best suits our needs becuase it balances detailed spatial resolution (30m x 30m resolution) with long temporal continuity ( [since 1982](https://www.usgs.gov/core-science-systems/nli/landsat/landsat-satellite-missions?qt-science_support_page_related_con=2#qt-science_support_page_related_con) for our effective purposes). 
+
+In all cases, I'm using NDVI values from the satellite imagery. There are definitely alternative indices used to indicate vegetation patterns. But NDVI is widely used, and comparable across many prior published studies.
+
+
+# Pulling Landsat data - Google Earth Engine
+
+For this analyses, I have focused on Landsat Satelites 4, 5, 7, and 8. All have a resolution of 30 m. Prior Landsats were more coarse (LS 1 & 2 = 80 m resolution, LS 3 = 40 m resolution). In [google earth engine](https://code.earthengine.google.com/), I have processed the top of atmosphere values, filtered data by band quality, and included both [tier 1 and tier 2 data](https://www.usgs.gov/core-science-systems/nli/landsat/landsat-collection-1?qt-science_support_page_related_con=1#qt-science_support_page_related_con). From tier 1 data, readings which indicated clear conditions or snow cover at time of imagery were kept. From tier 2 data, NDVI was only used when the band quality indicated snow cover. Tier 2 data were used as a supplement, because the snow covered satelite images were often not included tier 1 data. It is important to have sufficient landsat data coverage during snow-covered periods (if applicable!) so that accurate "troughs" can be identified.
+
+As an FYI, Landsat coverage improved greatly with satelites 7 and 8. As such, some sites have very sparse coverage prior to 1999. However, the  scan-line corrector on landsat 7 failed on June 2003, meaning that some sites again had only spotty coverage until landsat 8's launch in 2003. 
+
+At each NutNet site, I picked an adjacent area to the experimental plot locations. There, I took a 30 m buffer radius (a couple sites are different - see GEE code) around that point to be our "site." Sometimes this meant that multiple paths/rows of landsat were included, which is fine. Sometimes it might mean that the NutNet site is not accurately reflected in our data (if for example a grassland site occurs admist a bunch of trees...those trees might get included by using this method). Essentially, if the NDVI data looks really bad for a specific site, the accuracy and relevance of the location I chose is probably the first thing to check - how accurately does our designated "region of interest" reflect the landscape?
+
+In google earth engine, the following was run. Apologies that it's long, messy, and that I'm not very good at creating loops within loops in JavaScript! There are some button options that pop up in GEE prompting the various extracted data to be saved. And that each site needs to get individually commented out and run. It's not pretty - but it does work well!!!
+
+## GEE code
+`//create ROI
+/*
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(18.724477, 68.366069), {label:'abisko_se'}).buffer(30)]); //UPDATED
+var NAME = 'abisko_se';
+
+var NAME = 'ahth_is'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-123.014311, 48.465041), {label:'amcamp_us'}).buffer(30)]);//UPDATED 
+var NAME = 'amcamp_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-19.672060, 65.133350), {label:'amlr_is'}).buffer(30)]); 
+var NAME = 'amlr_is'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-78.162, -0.467083333), {label:'anti_ec'}).buffer(30)]); 
+var NAME = 'anti_ec'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-81.218472, 27.170194), {label:'arch_us'}).buffer(30)]);//UPDATED 
+var NAME = 'arch_us' 
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(101.865677, 33.670918), {label:'azitwo_cn'}).buffer(30)]); //UPDATED
+var NAME = 'azitwo_cn';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(11.880336, 51.391717), {label:'badlau_de'}).buffer(30)]); //UPDATED
+var NAME = 'badlau_de' 
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-71.152318, -41.006807), {label:'bari_ar'}).buffer(30)]);
+var NAME = 'bari_ar';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-99.652173, 42.245453), {label:'barta_us'}).buffer(30)]);
+var NAME = 'barta_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(11.584053, 49.921323), {label:'bayr_de'}).buffer(30)]);
+var NAME = 'bayr_de';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-105.233063, 39.972852), {label:'bldr_us'}).buffer(30)]);
+var NAME = 'bldr_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-95.087419, 39.596985), {label:'bnbt_us'}).buffer(30)]);
+var NAME = 'bnbt_us' 
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.966830, 44.278458), {label:'bnch_us'}).buffer(30)]);
+var NAME = 'bnch_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(147.253979, -36.873971), {label:'bogong_au'}).buffer(30)]);
+var NAME = 'bogong_au';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.958134, 44.277013), {label:'bttr_us'}).buffer(30)]);
+var NAME = 'bttr_us'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(151.606325, -26.892224), {label:'bunya_au'}).buffer(30)]);
+var NAME = 'bunya_au' 
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(151.139265, -27.735334), {label:'burrawan_au'}).buffer(30)]);
+var NAME = 'burrawan_au';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-8.992624, 53.072023), {label:'burren_ie'}).buffer(30)]);
+var NAME = 'burren_ie' 
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(82.708800, 42.884700), {label:'bynb_cn'}).buffer(30)]);
+var NAME = 'bynb_cn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-93.384990, 41.784526), {label:'cbgb_us'}).buffer(30)]);
+var NAME = 'cbgb_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-93.211968, 45.427225), {label:'cdcr_us'}).buffer(30)]);
+var NAME = 'cdcr_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-101.643424, 41.206284), {label:'cdpt_us'}).buffer(30)]);
+var NAME = 'cdpt_us';
+
+var NAME = 'cereep_fr'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-58.264246, -36.275950), {label:'chilcas_ar'}).buffer(30)]);
+var NAME = 'chilcas_ar';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-8.791102, 38.829049), {label:'comp_pt'}).buffer(30)]);
+var NAME = 'comp_pt';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-123.635063, 48.808390), {label:'cowi_ca'}).buffer(30)]); //UPDATED
+var NAME = 'cowi_ca';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(144.791878, -37.806923), {label:'derr_au'}).buffer(30)]);
+var NAME = 'derr_au';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-96.855257, 40.695596), {label:'doane_us'}).buffer(30)]);
+var NAME = 'doane_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(29.267586, -28.961042), {label:'drake_za'}).buffer(30)]);
+var NAME = 'drake_za'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.05025, 36.984861), {label:'elkh_us'}).buffer(30)]);
+var NAME = 'elkh_us';
+*/
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-117.090227, 32.892409),{label:'elliot_us'}).buffer(30)]); 
+var NAME = 'elliot_us';
+/*
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(26.353695, 58.257967), {label:'elva_ee'}).buffer(30)]);
+var NAME = 'elva_ee';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(138.474286, -23.756611), {label:'ethamc_au'}).buffer(30)]);
+var NAME = 'ethamc_au'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(138.398970, -23.638610), {label:'ethass_au'}).buffer(30)]);
+var NAME = 'ethass_au'
+
+var NAME = 'fnly_us'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(7.827216, 48.020054), {label:'free_de'}).buffer(30)]);
+var NAME = 'free_de'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(8.540363, 47.114728), {label:'frue_ch'}).buffer(30)]);
+var NAME = 'frue_ch';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(10.718500, 43.797100), {label:'gall_it'}).buffer(30)]);
+var NAME = 'gall_it'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(90.233300, 31.383330), {label:'gcnban_cn'}).buffer(30)]);
+var NAME = 'gcnban_cn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(91.066770, 30.496210), {label:'gcndan_cn'}).buffer(30)]);
+var NAME = 'gcndan_cn'
+
+var NAME = 'gcnhai_cn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(102.577863, 32.828816), {label:'gcnhon_cn'}).buffer(30)]);
+var NAME = 'gcnhon_cn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(119.951580, 49.333000), {label:'gcnhul_cn'}).buffer(30)]);
+var NAME = 'gcnhul_cn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(92.009700, 31.643700), {label:'gcnnaq_cn'}).buffer(30)]);
+var NAME = 'gcnnaq_cn'
+
+var NAME = 'gcnsui_cn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(106.966670, 41.416670), {label:'gcnura_cn'}).buffer(30)]);
+var NAME = 'gcnura_cn'
+
+var NAME = 'gcnxil_cn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(106.929611, 37.309860), {label:'gcnyan_cn'}).buffer(30)]);
+var NAME = 'gcnyan_cn'
+
+var NAME = 'gcnyou_cn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(30.292178, -29.284046), {label:'gilb_za'}).buffer(30)]);
+var NAME = 'gilb_za'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-123.035557, 46.869083), {label:'glac_us'}).buffer(30)]); 
+var NAME = 'glac_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-96.1396933, 41.339757), {label:'glcr_us'}).buffer(30)]); 
+var NAME = 'glcr_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-86.702686, 36.872137), {label:'hall_us'}).buffer(30)]); 
+var NAME = 'hall_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-119.497670, 42.723745), {label:'hart_us'}).buffer(30)]);
+var NAME = 'hart_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.551652, 36.386708), {label:'hast_us'}).buffer(30)]); //UPDATED
+var NAME = 'hast_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-0.645026, 51.413098), {label:'hero_uk'}).buffer(30)]);
+var NAME = 'hero_uk';
+
+var NAME = 'hnvr_us'
+
+var NAME = 'hogone_us'
+
+var NAME = 'hogtwo_us'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-123.061648, 39.011633), {label:'hopl_us'}).buffer(30)]);
+var NAME = 'hopl_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(105.967778, 47.666528), {label:'hustai_mn'}).buffer(30)]);
+var NAME = 'hustai_mn'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.241545, 37.405222), {label:'jasp_us'}).buffer(30)]);
+var NAME = "jasp_us"
+
+var NAME = 'jena_de';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-106.787094, 32.530054), {label:'jorn_us'}).buffer(30)]);
+var NAME = 'jorn_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(18.323098, 68.392169), {label:'kark_se'}).buffer(30)]);
+var NAME = 'kark_se';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-85.391144, 42.409125), {label:'kbs_us'}).buffer(30)]);
+var NAME = 'kbs_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(78.008754, 32.319508), {label:'kibber_in'}).buffer(30)]);
+var NAME = "kibber_in"
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(130.951768, -16.110229), {label:'kidman_au'}).buffer(30)]);
+var NAME = 'kidman_au';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(20.87352408,  69.05678545), {label:'kilp_fi'}).buffer(30)]);
+var NAME = 'kilp_fi';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(143.851472, -36.324810), {label:'kiny_au'}).buffer(30)]);
+var NAME = 'kiny_au';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(23.794941, 58.710601), {label:'kirik_ee'}).buffer(30)]);
+var NAME = "kirik_ee";
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-79.537881, 44.024616), {label:'koffler_ca'}).buffer(30)]);
+var NAME = 'koffler_ca';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-96.582323, 39.070328), {label:'konz_us'}).buffer(30)]);
+var NAME = 'konz_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-51.798613, -20.983784), {label:'lagoas_br'}).buffer(30)]);
+var NAME = 'lagoas_br';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-95.182989, 43.384792), {label:'lake_us'}).buffer(30)]);
+var NAME = 'lake_us';
+
+var NAME = 'lakta_se';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-2.627710, 53.985674), {label:'lancaster_uk'}).buffer(30)]);
+var NAME = 'lancaster_uk';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-124.048400, 46.614900), {label:'lead_us'}).buffer(30)]);
+var NAME = 'lead_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.128676, 44.205263), {label:'look_us'}).buffer(30)]);
+var NAME = 'look_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-101.897343, 33.600589), {label:'lubb_us'}).buffer(30)]);
+var NAME = 'lubb_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-57.424151, -37.714602), {label:'marc_ar'}).buffer(30)]);
+var NAME = 'marc_ar';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-77.042078, 39.527459), {label:'mcdan_us'}).buffer(30)]);
+var NAME = 'mcdan_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.407466, 38.864058), {label:'mcla_us'}).buffer(30)]);
+var NAME = 'mcla_us';
+
+var NAME = 'meto_us'''
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(143.321660, -22.483803), {label:'mitch_au'}).buffer(30)]);
+var NAME = 'mitch_au';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-114.000646,  46.664443), {label:'msla_us'}).buffer(30)]);
+var NAME = 'msla_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-96.453980, 46.870938), {label:'msum_us'}).buffer(30)]);
+var NAME = 'msum_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(117.611742, -31.781354), {label:'mtca_au'}).buffer(30)]);
+var NAME = 'mtca_au';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(137.661096, 35.231685), {label:'neba_jp'}).buffer(30)]);
+var NAME = 'neba_jp'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(146.006711, -36.895778), {label:'nilla_au'}).buffer(30)]);
+var NAME = 'nilla_au';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(5.749875, 52.059696), {label:'nioo_nl'}).buffer(30)]);
+var NAME = 'nioo_nl';
+
+var NAME = 'niwo_us'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(106.886887, 47.769495), {label:'ovor_mn'}).buffer(30)]);
+var NAME = 'ovor_mn';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-64.434831, -36.586107), {label:'pampa_ar'}).buffer(30)]);
+var NAME = 'pampa_ar';
+
+var NAME = 'pape_de';
+
+var NAME = 'pich_ec'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(116.972561, -32.496899), {label:'ping_au'}).buffer(30)]);
+var NAME = 'ping_au'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(152.923522, -27.530424), {label:'pinj_au'}).buffer(30)]);
+var NAME = 'pinj_au';
+
+var NAME = 'podo_ec'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-70.407124, -51.914837), {label:'potrok_ar'}).buffer(30)]);
+var NAME = 'potrok_ar';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-90.169865, 30.517510), {label:'ramsay_us'}).buffer(30)]);
+var NAME = 'ramsay_us';
+
+var NAME = 'rook_uk';
+
+var NAME = "saana_fi';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-120.239269, 39.430489), {label:'sage_us'}).buffer(30)]);
+var NAME = 'sage_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-99.166935, 39.085843), {label:'saline_us'}).buffer(30)]);
+var NAME = 'saline_us';
+
+var NAME = 'sava_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-120.021470, 34.696911), {label:'sedg_us'}).buffer(30)]);
+var NAME = 'sedg_us'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(34.857533, -2.429138), {label:'sereng_tz'}).buffer(30)]);
+var NAME = 'sereng_tz';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-106.691175, 34.360198), {label:'sevi_us'}).buffer(30)]);
+var NAME = 'sevi_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-104.767174, 40.816332), {label:'sgs_us'}).buffer(30)]);
+var NAME = 'sgs_us'
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-112.196699, 44.244893), {label:'shps_us'}).buffer(30)]);
+var NAME = 'shps_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.283696, 39.235510), {label:'sier_us'}).buffer(30)]);
+var NAME = 'sier_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(74.742883, 14.419046), {label:'sirsi_in'}).buffer(30)]);
+var NAME = 'sirsi_in';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.624726, 48.206135), {label:'smith_us'}).buffer(30)]);
+var NAME = 'smith_us';
+
+var NAME = 'spin_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-64.170575, -42.654068), {label:'spv_ar'}).buffer(30)]);
+var NAME = 'spv_ar';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(30.716644, -29.810615), {label:'summ_za'}).buffer(30)]);
+var NAME = 'summ_za';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point( 16.44713167, 78.69017773 ), {label:'sval_no'}).buffer(30)]);
+var NAME = 'sval_no';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-97.349443, 31.044188), {label:'temple_us'}).buffer(30)]);
+var NAME = 'temple_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-17.090214, 65.901294), {label:'thth_is'}).buffer(30)]);
+var NAME = 'thth_is';
+
+var NAME = 'tmlr_is';
+
+var NAME = 'trel_us';
+
+var NAME = 'tyso_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.740563, 36.867430), {label:'ucsc_us'}).buffer(30)]);
+var NAME = 'ucsc_us';
+
+var NAME = "ufrec.us";
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(30.412772, -29.670833), {label:'ukul_za'}).buffer(30)]);
+var NAME = 'ukul_za';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-79.019186, 36.007745), {label:'unc_us'}).buffer(30)]);
+var NAME = 'unc_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-81.317171, 43.192809), {label:'uwo_ca'}).buffer(30)]);
+var NAME = 'uwo_ca';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(10.371966, 46.632543), {label:'valm_ch'}).buffer(30)]);
+var NAME = 'valm_ch';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-101.609734, 21.783367), {label:'vaqu_mx'}).buffer(30)]);
+var NAME = 'vaqu_mx';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(29.089939, 70.308117), {label:'varexp_no'}).buffer(30)]);
+var NAME = 'varexp_no';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(29.539800, 70.327970), {label:'vargrass_no'}).buffer(30)]);
+var NAME = 'vargrass_no';
+
+var NAME = 'varheath_no';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(18.274396, 68.416979), {label:'vass_se'}).buffer(30)]);
+var NAME = 'vass_se';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-111.579722, 33.583333), {label:'wapatki_us'}).buffer(30)]);
+var NAME = 'wapatki_us';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(116.673782, 43.551476), {label:'xilin_cn'}).buffer(30)]);
+var NAME = 'xilin_cn';
+
+var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(150.738804, -33.614034), {label:'yarra_au'}).buffer(30)]);
+var NAME = 'yarra_au';
+
+*/
+
+
+//LS 8
+var addNDVI_8 = function(image){
+  return image
+  .addBands(image.normalizedDifference(['B5','B4'])
+  .rename('NDVI'))
+  .float();
+};
+
+//LS 754
+var addNDVI_754 = function(image){
+  return image
+  .addBands(image.normalizedDifference(['B4','B3'])
+  .rename('NDVI'))
+  .float();
+};
+
+
+//abisko
+var site_LS8 = ee.ImageCollection('LANDSAT/LC08/C01/T1_TOA')
+  .map(addNDVI_8)
+  .select('NDVI','BQA')
+  .getRegion(site, 30);
+
+var site_LS7 = ee.ImageCollection('LANDSAT/LE07/C01/T1_TOA')
+  .map(addNDVI_754)
+  .select('NDVI','BQA')
+  .getRegion(site, 30);
+
+var site_LS5 = ee.ImageCollection('LANDSAT/LT05/C01/T1_TOA')
+  .map(addNDVI_754)
+  .select('NDVI','BQA')
+  .getRegion(site, 30);
+  
+var site_LS4 = ee.ImageCollection('LANDSAT/LT04/C01/T1_TOA')
+  .map(addNDVI_754)
+  .select('NDVI','BQA')
+  .getRegion(site, 30);
+  
+var site_LS4_t2 = ee.ImageCollection('LANDSAT/LT04/C01/T2_TOA')
+  .map(addNDVI_754)
+  .select('NDVI','BQA')
+  .getRegion(site, 30);  
+
+var site_LS5_t2 = ee.ImageCollection('LANDSAT/LT05/C01/T2_TOA')
+  .map(addNDVI_754)
+  .select('NDVI','BQA')
+  .getRegion(site, 30);
+  
+var site_LS7_t2 = ee.ImageCollection('LANDSAT/LE07/C01/T2_TOA')
+  .map(addNDVI_754)
+  .select('NDVI','BQA')
+  .getRegion(site, 30);  
+
+var site_LS8_t2 = ee.ImageCollection('LANDSAT/LC08/C01/T2_TOA')
+  .map(addNDVI_8)
+  .select('NDVI','BQA')
+  .getRegion(site, 30);
+
+
+var site_8 = ee.FeatureCollection(site_LS8.map(function(list) {
+    var list = ee.List(list)
+    var dict = {
+        col1: list.get(0),
+        col2: list.get(1),
+        col3: list.get(2),
+        col4: list.get(4),
+        col5: list.get(5),
+    };
+    return ee.Feature(null, dict);
+}));
+
+var site_7 = ee.FeatureCollection(site_LS7.map(function(list) {
+    var list = ee.List(list)
+    var dict = {
+        col1: list.get(0),
+        col2: list.get(1),
+        col3: list.get(2),
+        col4: list.get(4),
+        col5: list.get(5),
+    };
+    return ee.Feature(null, dict);
+}));
+
+var site_5 = ee.FeatureCollection(site_LS5.map(function(list) {
+    var list = ee.List(list)
+    var dict = {
+        col1: list.get(0),
+        col2: list.get(1),
+        col3: list.get(2),
+        col4: list.get(4),
+        col5: list.get(5),
+    };
+    return ee.Feature(null, dict);
+}));
+
+var site_4 = ee.FeatureCollection(site_LS4.map(function(list) {
+    var list = ee.List(list)
+    var dict = {
+        col1: list.get(0),
+        col2: list.get(1),
+        col3: list.get(2),
+        col4: list.get(4),
+        col5: list.get(5),
+    };
+    return ee.Feature(null, dict);
+}));
+
+//
+var site_4_t2 = ee.FeatureCollection(site_LS4_t2.map(function(list) {
+    var list = ee.List(list)
+    var dict = {
+        col1: list.get(0),
+        col2: list.get(1),
+        col3: list.get(2),
+        col4: list.get(4),
+        col5: list.get(5),
+    };
+    return ee.Feature(null, dict);
+}));
+var site_5_t2 = ee.FeatureCollection(site_LS5_t2.map(function(list) {
+    var list = ee.List(list)
+    var dict = {
+        col1: list.get(0),
+        col2: list.get(1),
+        col3: list.get(2),
+        col4: list.get(4),
+        col5: list.get(5),
+    };
+    return ee.Feature(null, dict);
+}));
+var site_7_t2 = ee.FeatureCollection(site_LS7_t2.map(function(list) {
+    var list = ee.List(list)
+    var dict = {
+        col1: list.get(0),
+        col2: list.get(1),
+        col3: list.get(2),
+        col4: list.get(4),
+        col5: list.get(5),
+    };
+    return ee.Feature(null, dict);
+}));
+var site_8_t2 = ee.FeatureCollection(site_LS8_t2.map(function(list) {
+    var list = ee.List(list)
+    var dict = {
+        col1: list.get(0),
+        col2: list.get(1),
+        col3: list.get(2),
+        col4: list.get(4),
+        col5: list.get(5),
+    };
+    return ee.Feature(null, dict);
+}));
+
+Export.table.toDrive({
+  collection: site_8,
+  description: NAME.concat('_ls8_t1'), //job name
+  folder: 'annoying manual',
+  fileFormat: 'CSV'
+});
+
+Export.table.toDrive({
+  collection: site_7,
+  description: NAME.concat('_ls7_t1'), //job name
+  folder: 'annoying manual',
+  fileFormat: 'CSV'
+});
+
+Export.table.toDrive({
+  collection: site_5,
+  description: NAME.concat('_ls5_t1'), //job name
+  folder: 'annoying manual',
+  fileFormat: 'CSV'
+});
+
+Export.table.toDrive({
+  collection: site_4,
+  description: NAME.concat('_ls4_t1'), //job name
+  folder: 'annoying manual',
+  fileFormat: 'CSV'
+});
+
+Export.table.toDrive({
+  collection: site_8_t2,
+  description: NAME.concat('_ls8_t2'), //job name
+  folder: 'annoying manual',
+  fileFormat: 'CSV'
+});
+
+Export.table.toDrive({
+  collection: site_7_t2,
+  description: NAME.concat('_ls7_t2'), //job name
+  folder: 'annoying manual',
+  fileFormat: 'CSV'
+});
+
+Export.table.toDrive({
+  collection: site_5_t2,
+  description: NAME.concat('_ls5_t2'), //job name
+  folder: 'annoying manual',
+  fileFormat: 'CSV'
+});
+
+Export.table.toDrive({
+  collection: site_4_t2,
+  description: NAME.concat('_ls4_t2'), //job name
+  folder: 'annoying manual',
+  fileFormat: 'CSV'
+});
+`
+
+# Processing NDVI values
+
+There are seemingly infiniate ways to process NDVI to pick out phenological dates. Quickly, we fitted cubic splines to each growing season at each site. We found that a single spline fit to each site (incompassing all growing years) was too sensitive to years with large spans of time without NDVI values. Then, we picked out the maximum NDVI from the fitted spline in each growing season. And the first date where NDVI >= 50 of the average range of NDVI (plus the avg. min) (as a green-up threshold). Originally I had used a fancy combination of derivatives (Buitenwerf et al), but they turned out to be very sensitive to missing values (problematic in snow-covered regions). 
+
+
+Behind the scenes, some fancy (and not-so-fancy) data processing happened: 
+1) dates were treated as radians to accomodate southern hemisphere and mediterranean sites with potential phenological dates spanning across years within the same growing season (for instance, a site with green-up in Dec 2018, NDVI max in March 2019, and brown down in May 2019; this is all classified as occuring during the 2019 growing season.)
+2) At certain sites there are periods of the year where NDVI data are not available, either becuase of persistant seasonal clouds, algorithm confusion between clouds and snow (aka water refelctance), or poor radiometric calibration on the landsat satelites. Conversely, there may often be time periods in which the 10-day average landsat coverage of a site is way more frequent (for example, periods when both landsat 7 and 8 orbit, etc).  
+3) NDVI values which were < 0 were reassigned a value of 0. This helped the fitted splines behave much better. 
+4) Regarding weighting points within the splines, each growing season's maximum NDVI value was weighted at 1, and all other values at 0.5 in order to most accurately capture the peak. 
+
+Also, some sites are strange - need to contact PIs eventually.
+* lake_us, lakta_se, marc_ar, mitch_au, tyso_us, valm_ch, xilin_cn, bldr_us all needed larger radius buffers
+
+# Methods
+
+## NutNet sites are all over the world
+* We also extract other site-level information at each site including:
+  + N deposition modeled for the year 1993
+  + Species richness across all years identified
+  + Soil information
+  + Monthly average precip anomolies from 1970-2000 baseline
+* Do note that there are sites which DO have good lat/long data (satelitte) which DON'T have good species richeness, etc (ground-truth NutNet) data, and vice versa
+ 
+```{r spatial, eval = T, echo = F, message = F, warning = F}
+sites_nutnet <- read_csv('../data/NutNetGreening_2019.10.15_ee.csv', col_types = cols()) %>%
+  dplyr::select(site_code, "GEE coordinates") %>%
+  separate("GEE coordinates", sep = ',', into = c('long', 'lat')) %>%
+  filter(!is.na(long)) %>%
+  mutate(lat = as.numeric(lat), long = as.numeric(long))
+sites_nutnet_sp <- sites_nutnet
+coordinates(sites_nutnet_sp) <- ~long + lat
+
+sites_nutnet_sp2<- sites_nutnet_sp %>% st_as_sf()
+
+#here is a map of where the sites are located
+world <- ne_countries(scale = "medium", returnclass = "sf")
+(ggplot(data = world, label = site)+
+  geom_sf() +
+  geom_point(data = sites_nutnet, aes (x = long, y = lat), col = "orange2") +
+  theme_bw()+
+  labs(title = "111 sites in analysis here"))
+
+
+# ###
+# # N deposition
+# ###
+ndep <- raster('../data/N-deposition1993.tif')
+
+ndep_merge <- raster::extract(ndep, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code) %>%
+  separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
+  dplyr::select(-b, -ID)
+
+summary(ndep_merge)
+# plot(ndep, main = "N Deposition modeled for 1993")
+```
+
+
+```{r climate}
+####
+## Temp
+####
+####
+# Daily climate data
+####
+#See get_CRU_TS.R script for details on how to download
+eightys <- read_csv("../data/CRU/CRU-monthly-tmp1981.1990.csv", col_types = cols()) %>% 
+  full_join(read_csv("../data/CRU/CRU-monthly-pre1981.1990.csv", col_types = cols())) %>%
+  dplyr::select(-date, -month, -year)
+
+ninetys <- read_csv("../data/CRU/CRU-monthly-tmp1991.2000.csv", col_types = cols()) %>% 
+  full_join(read_csv("../data/CRU/CRU-monthly-pre1991.2000.csv", col_types = cols())) %>%
+  dplyr::select(-date, -month, -year)
+
+thoudsands <- read_csv("../data/CRU/CRU-monthly-tmp2001.2010.csv", col_types = cols()) %>% 
+  full_join(read_csv("../data/CRU/CRU-monthly-pre2001.2010.csv", col_types = cols())) %>%
+  dplyr::select(-date, -month, -year)
+
+tens <- read_csv("../data/CRU/CRU-monthly-tmp2011.2018.csv", col_types = cols()) %>% 
+  full_join(read_csv("../data/CRU/CRU-monthly-pre2011.2018.csv", col_types = cols())) %>%
+  dplyr::select(-date, -month, -year)
+
+climate <- bind_rows(eightys, ninetys, thoudsands, tens) %>%
+  rename(sitename = site_code)
+
+
+#worldclim avgs 1970-2000 http://worldclim.org/version2
+WC1 <- raster('../data/CRU/wc2.0_30s_tavg_01.tif')
+wc1 <- raster::extract(WC1, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC2 <- raster('../data/CRU/wc2.0_30s_tavg_02.tif')
+wc2 <- raster::extract(WC2, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC3 <- raster('../data/CRU/wc2.0_30s_tavg_03.tif')
+wc3 <- raster::extract(WC3, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC4 <- raster('../data/CRU/wc2.0_30s_tavg_04.tif')
+wc4 <- raster::extract(WC4, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC5 <- raster('../data/CRU/wc2.0_30s_tavg_05.tif')
+wc5 <- raster::extract(WC5, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC6 <- raster('../data/CRU/wc2.0_30s_tavg_06.tif')
+wc6 <- raster::extract(WC6, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC7 <- raster('../data/CRU/wc2.0_30s_tavg_07.tif')
+wc7 <- raster::extract(WC7, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC8 <- raster('../data/CRU/wc2.0_30s_tavg_08.tif')
+wc8 <- raster::extract(WC8, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC9 <- raster('../data/CRU/wc2.0_30s_tavg_09.tif')
+wc9 <- raster::extract(WC9, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC10 <- raster('../data/CRU/wc2.0_30s_tavg_10.tif')
+wc10 <- raster::extract(WC10, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC11 <- raster('./CRU/wc2.0_30s_tavg_11.tif')
+wc11 <- raster::extract(WC11, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC12 <- raster('./CRU/wc2.0_30s_tavg_12.tif')
+wc12 <- raster::extract(WC12, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+
+AvgClimate <- full_join(wc1, wc2, by = c("ID", "sitename")) %>%
+  full_join(wc3, by = c("ID", "sitename")) %>%
+  full_join(wc4, by = c("ID", "sitename")) %>%
+  full_join(wc5, by = c("ID", "sitename")) %>%
+  full_join(wc6, by = c("ID", "sitename")) %>%
+  full_join(wc7, by = c("ID", "sitename")) %>%
+  full_join(wc8, by = c("ID", "sitename")) %>%
+  full_join(wc9, by = c("ID", "sitename")) %>%
+  full_join(wc10, by = c("ID", "sitename")) %>%
+  full_join(wc11, by = c("ID", "sitename")) %>%
+  full_join(wc12, by = c("ID", "sitename"))  %>%
+  gather(Month, AvgTempLTA, -ID, -sitename) %>%
+  mutate(Month = recode(Month, "wc2.0_30s_tavg_01" = 1,
+                        "wc2.0_30s_tavg_02" = 2, 
+                        "wc2.0_30s_tavg_03" = 3,
+                        "wc2.0_30s_tavg_04" = 4, 
+                        "wc2.0_30s_tavg_05" = 5,
+                        "wc2.0_30s_tavg_06" = 6,
+                        "wc2.0_30s_tavg_07" = 7, 
+                        "wc2.0_30s_tavg_08" = 8, 
+                        "wc2.0_30s_tavg_09" = 9,
+                        "wc2.0_30s_tavg_10" = 10,
+                        "wc2.0_30s_tavg_11" = 11,
+                        "wc2.0_30s_tavg_12" = 12)) 
+
+
+#####
+# Precip
+#####
+
+#worldclim avgs 1970-2000 http://worldclim.org/version2
+preWC1 <- raster('./CRU/wc2.0_30s_prec_01.tif')
+prewc1 <- raster::extract(preWC1, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC2 <- raster('./CRU/wc2.0_30s_prec_02.tif')
+prewc2 <- raster::extract(preWC2, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC3 <- raster('./CRU/wc2.0_30s_prec_03.tif')
+prewc3 <- raster::extract(preWC3, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC4 <- raster('./CRU/wc2.0_30s_prec_04.tif')
+prewc4 <- raster::extract(preWC4, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC5 <- raster('./CRU/wc2.0_30s_prec_05.tif')
+prewc5 <- raster::extract(preWC5, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC6 <- raster('./CRU/wc2.0_30s_prec_06.tif')
+prewc6 <- raster::extract(preWC6, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC7 <- raster('./CRU/wc2.0_30s_prec_07.tif')
+prewc7 <- raster::extract(preWC7, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC8 <- raster('./CRU/wc2.0_30s_prec_08.tif')
+prewc8 <- raster::extract(preWC8, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC9 <- raster('./CRU/wc2.0_30s_prec_09.tif')
+prewc9 <- raster::extract(preWC9, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC10 <- raster('./CRU/wc2.0_30s_prec_10.tif')
+prewc10 <- raster::extract(preWC10, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC11 <- raster('./CRU/wc2.0_30s_prec_11.tif')
+prewc11 <- raster::extract(preWC11, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC12 <- raster('./CRU/wc2.0_30s_prec_12.tif')
+prewc12 <- raster::extract(preWC12, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+
+AvgClimatePrecip <- full_join(prewc1, prewc2, by = c("ID", "sitename")) %>%
+  full_join(prewc3, by = c("ID", "sitename")) %>%
+  full_join(prewc4, by = c("ID", "sitename")) %>%
+  full_join(prewc5, by = c("ID", "sitename")) %>%
+  full_join(prewc6, by = c("ID", "sitename")) %>%
+  full_join(prewc7, by = c("ID", "sitename")) %>%
+  full_join(prewc8, by = c("ID", "sitename")) %>%
+  full_join(prewc9, by = c("ID", "sitename")) %>%
+  full_join(prewc10, by = c("ID", "sitename")) %>%
+  full_join(prewc11, by = c("ID", "sitename")) %>%
+  full_join(prewc12, by = c("ID", "sitename"))  %>%
+  gather(Month, AvgPrecipLTA, -ID, -sitename) %>%
+  mutate(Month = recode(Month, "wc2.0_30s_prec_01" = 1,
+                        "wc2.0_30s_prec_02" = 2, 
+                        "wc2.0_30s_prec_03" = 3,
+                        "wc2.0_30s_prec_04" = 4, 
+                        "wc2.0_30s_prec_05" = 5,
+                        "wc2.0_30s_prec_06" = 6,
+                        "wc2.0_30s_prec_07" = 7, 
+                        "wc2.0_30s_prec_08" = 8, 
+                        "wc2.0_30s_prec_09" = 9,
+                        "wc2.0_30s_prec_10" = 10,
+                        "wc2.0_30s_prec_11" = 11,
+                        "wc2.0_30s_prec_12" = 12)) 
+####
+#Climate change
+####
+#ceda precip in mm/month
+#world clim is also in mm/month
+ClimChange <- climate %>% 
+  mutate(Month = month(plotdate)) %>%
+  full_join(AvgClimate) %>%
+  full_join(AvgClimatePrecip) %>%
+  mutate(TempDifference = tmp_degrees_Celsius - AvgTempLTA) %>%
+  mutate(PrecipDifference = `pre_mm/month` - AvgPrecipLTA) %>%
+  separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
+  dplyr::select(-b)
+
+ClimChange %>% filter(site=="sval") %>%
+  ggplot(aes(x=plotdate, y=TempDifference))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month)+
+  labs(y = "Anomaly from 1970-2000, celsius", x = "Year", title = "Temperature Anomalies, Svalbard")+
+  theme_cowplot()+
+  geom_hline(yintercept = 0)+
+  scale_x_date(limits = c(ymd("1984-01-01"), ymd("2019-10-1")), date_breaks = "10 years", date_labels = "%Y") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ClimChange %>% filter(site=="cowi") %>%
+  ggplot(aes(x=plotdate, y=PrecipDifference))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month)+
+  labs(y = "Anomaly from 1970-2000, mm", x = "Year", title = "Precip Anomalies, Cowichan")+
+  theme_cowplot()+
+  geom_hline(yintercept = 0)+
+  scale_x_date(limits = c(ymd("1984-01-01"), ymd("2019-10-1")), date_breaks = "10 years", date_labels = "%Y") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r siteinfo}
+#######
+# Site info
+######
+dropbox <- read_csv('/Users/ellen/Dropbox/NutNet data/comb-by-plot-clim-soil-diversity-04-Sep-2020.csv', 
+                    col_types = cols(),
+                    na = c("NULL", "NA")) #%>%
+  # mutate(first_nutrient_year = as.numeric(first_nutrient_year),
+  #        evenness = as.numeric(evenness)) 
+
+siteclim<- dropbox %>%
+  filter(trt == "Control") %>%
+  separate(site_code, into = c('site', 'country'), sep='[.]') %>%
+  group_by(site) %>%
+  summarise(Managed = mean(managed), #sdManaged = sd(managed),
+            Burned = mean(burned), #sdBurned=sd(burned),
+            Elevation = mean(elevation), #sdElevation=sd(elevation),
+            RainMAP = mean(MAP_v2, na.rm=T), #sdRainPET=sd(MAP_v2, na.rm=T),
+            TempMAT = mean(MAT_v2), #sdTempMAT = sd(MAT_v2),
+            Richness = mean(site_richness),#, sdRichness = sd(site_richness))
+            NativeRichness = mean(site_native_richness),
+            IntRichness = mean(site_introduced_richness),
+            FractionExotic = (IntRichness/(NativeRichness+IntRichness)),
+            SoilC = mean(pct_C, na.rm = T),
+            SoilN = mean(pct_N, na.rm = T),
+            SoilP = mean(ppm_P, na.rm = T), 
+            SoilK = mean(ppm_K, na.rm = T)) %>%
+  filter(!is.na(Richness))
+
+
+obsyr_even <- dropbox %>%
+  filter((year == (first_nutrient_year - 1)) | experiment_type == "Observational") %>%
+  group_by(site_code) %>%  #filter(site_code == "lagoas.br")
+  summarise(ObsYrMeanEven = mean(evenness, na.rm = T),
+            ObsYrMeanInvSimp = mean(inverse_simpson, na.rm = T)) %>%
+    separate(site_code, into = c('site', 'country'), sep='[.]') %>% select(-country)
+
+obsyr_even %>%
+  ggplot(aes(x = ObsYrMeanEven, y = ObsYrMeanInvSimp)) + 
+  geom_point()
+  
+region <- read_csv('/Users/ellen/Dropbox/NutNet data/sites-02-August-2019.csv', col_types = cols()) %>%
+  separate(site_code, into = c('site', 'country'), sep='[.]') %>% 
+  dplyr::select(site, continent, habitat, latitude, longitude)
+
+SiteInfo <- ndep_merge %>% 
+  left_join(region) %>% 
+  inner_join(siteclim) %>%
+  left_join(obsyr_even)
+
+# kable(SiteInfo %>%
+#   select(site:SoilK, N.deposition1993)) %>%
+#   kable_styling("striped", full_width = F)
+(summary(SiteInfo))
+
+###
+# Site biomass
+###
+yrprod1<- read_csv('/Users/ellen/Dropbox/NutNet data/comb-by-plot-clim-soil-diversity-03-Jun-2020.csv', 
+                   col_types = cols(), na = c("NULL", "NA")) %>%
+  separate(site_code, into = c('site', 'country'), sep = '[.]') %>%
+  filter(trt == "Control") %>% 
+  group_by(site, year) %>%
+  summarise(ANPP = mean(live_mass, na.rm = T),
+            sdANPP = sd(live_mass, na.rm = T)) %>%
+  rename(gs = year) %>% filter(!is.na(sdANPP))
+
+yrprod <- yrprod1 %>% group_by(site) %>%
+  summarise(YrsBiomass = n()) %>%
+  left_join(yrprod1)
+
+# #plot
+# yrprod %>%
+#   gather(Msmr, Value, -site, -gs) %>%
+#   mutate(Msmr = dplyr::recode(Msmr, "ANPP" = "ANPP g/m2", "sdANPP" = "St. Dev ANPP")) %>%
+#   ggplot(aes(Value)) +
+#   geom_histogram() +
+#   facet_wrap(~ Msmr, scales = "free") +
+#   theme_cowplot() +
+#   labs(x = "", title = "Biomass Production")
+# 
+
+```
+
+
+
+## NDVI signatures and Phenlogical Dates things
+
+* First have to create some radian functions to convert linear calendar years into circular data
+* Then read in all Landsat data which gets filtered to include only pixels identified as being "clear" or "snow" covered. Also we set the minimum NDVI to 0. 
+```{r readinphenodata, eval = T, echo = F, message = F, warning = F}
+pheno_path <- "./annoying manual"   # path to the data
+pheno_files <- dir(pheno_path, pattern = "*.csv") # get file names
+pheno_files_all <- tibble(filename = pheno_files) %>%
+  mutate(file_contents = map(filename,
+                             ~ read_csv(file.path(pheno_path, .),
+                                        skip = 2,  col_type = cols(), col_names = FALSE)))   %>%
+  unnest() %>%
+  rename(row = X1, id = X2, longitude = X3, latitude = X4, NDVI = X5, BQA = X6, geo = X7) %>%
+  select(-row, -geo) %>%
+  filter(!is.na(NDVI), !is.na(BQA)) %>%
+  separate(filename, sep = "_", into = c("site", "country", "ls", "tier")) %>%
+  separate(id, sep="_", into = c('landsat', 'path', 'date')) %>% 
+  mutate(Date = ymd(date)) 
+
+intp <- read_csv('./interpretation.csv', col_types = cols())
+
+pheno_data <- pheno_files_all %>% 
+  full_join(intp) %>%
+  filter(remove=='keep') %>%
+  filter(!is.na(NDVI), !is.na(BQA)) %>%
+  group_by(site, Date) %>%
+  summarise(NDVI = mean(NDVI)) %>%
+  mutate(NDVI = ifelse(NDVI < 0, 0, NDVI)) %>%
+  arrange(site, Date) 
+```
+
+* Then need to identify the average trough date
+* A "growing season" or "phenological year" is subsequently identified as the 365 days following the "trough date" plus an GSType 90 day buffer on either end. So a total of 90 + 365 + 90 days. I know this is not totally right since leap years are confusing. 
+* And then take the Landsat readings and duplicate the readings that fall within the "shoulder season". So that we have the total, long data set of all NDVI readings
+* We also assign a green-up critera, which is the 50% of the average range of NDVI at each site ((avg max - avg min * 50) + avg min). This green-up threshold is constant at all years within a site. 
+
+```{r getShoulderSeasonsTroughs, eval = T, echo = F, message = F, warning = F}
+#first need to fit a single cubic spline to all data, and then get the average date which has the minimum NDVI
+min_ndvi_name <- levels(as.factor(pheno_data$site)) %>%
+  tibble() %>%
+  rename(site = ".") %>%
+  mutate(sitenum = seq(1:nrow(.)))
+  
+ndviemptydataframe <- tibble(x = numeric(),
+                             ndvi = numeric(),
+                             sitenum = numeric(0))
+
+min_ndvi <- ndviemptydataframe
+for (i in c(1:nrow(min_ndvi_name))) {
+  b <- i
+  plot.filter <- (min_ndvi_name %>% full_join(pheno_data, by = 'site')) %>% filter(sitenum == b)
+  spline <- smooth.spline(x = plot.filter$Date, y = plot.filter$NDVI)
+  ndvi <- as_tibble(predict(spline, as.numeric(ymd(min(plot.filter$Date))):as.numeric(ymd(max(plot.filter$Date))), deriv = 0)) %>%
+    rename(ndvi = y) %>%
+    mutate(Date = as_date(x)) %>%
+    mutate(sitenum = b)
+  min_ndvi <- bind_rows(min_ndvi, ndvi)
+}
+
+min_ndvifitted <- full_join(min_ndvi, min_ndvi_name)
+
+siteinfo <- min_ndvifitted  %>% mutate(Year = year(Date)) %>%
+  group_by(site, Year) %>% summarise(ndvi_min = min(ndvi), ndvi_max = max(ndvi)) %>%
+  rename(ndvi = ndvi_min) %>%
+  mutate(DaysInYear = ifelse(leap_year(Year) == 'TRUE', 366, 365)) %>%
+  left_join((min_ndvifitted %>% mutate(Year = year(Date)))) %>%
+  mutate(Julian = yday(Date)) %>%
+  mutate(DegreeJulian = Julian / DaysInYear * 360) %>%
+  group_by(site) %>% summarise(TroughDateRadian = circmean_degrees(DegreeJulian),
+                               avg_ndvi_max = mean(ndvi_max)) %>%
+  mutate(TroughDate = TroughDateRadian * 365 / 360) %>%
+  mutate(MinDate = (as_date(TroughDate))) %>%
+  mutate(Start = yday(MinDate)) %>%
+  mutate(End = yday(MinDate) - 1) %>%
+  select(-TroughDate,-MinDate,-avg_ndvi_max) %>%
+  full_join(min_ndvi_name) 
+ 
+pheno_data_all_1 <- full_join(pheno_data, siteinfo) 
+
+#assign growing season
+GSmain <- siteinfo %>% 
+full_join(tibble(site = rep(siteinfo$site, each = (2019-1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>% 
+  mutate(startyr = ifelse(Start>182, year-1, (year))) %>% 
+  mutate(normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep='-')) %>% 
+  mutate(normalstart=ymd(normalstart))  %>% 
+  mutate(normalend = normalstart + 364) %>%
+  mutate(earlystart = normalstart - 90) %>%
+  mutate(lateend = normalend + 90) %>%
+  select(site, normalstart, normalend, year) %>%
+  mutate(ID = paste(site, year, sep = "_")) %>%
+  select(-site, -year) %>% 
+  gather(var, Date, -ID) %>%
+  group_by(ID) %>%
+  distinct() %>%
+  complete(Date = seq.Date(min(Date), max(Date), by = "day")) %>%
+  select(-var) %>% 
+  separate(ID, into = c('site', 'GrowingSeason'), sep="_") %>% 
+  mutate(GSType = 'mainGS') %>%
+  mutate(GrowingSeason = as.numeric(GrowingSeason)) %>% 
+  mutate(weights = 999)
+
+#add 90 days pre/post gorwing season
+GSearly<-siteinfo %>%
+  full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>% 
+  mutate(startyr = ifelse(Start > 182, year - 1, (year))) %>% 
+  mutate(normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = '-')) %>% 
+  mutate(normalstart = ymd(normalstart))  %>% 
+  mutate(normalend = normalstart + 364) %>% 
+  mutate(earlystart = normalstart - 90) %>%
+  mutate(lateend = normalend + 90) %>%
+  select(site, normalstart, earlystart, year) %>%
+  mutate(ID = paste(site, year, sep = "_")) %>%
+  select(-site, -year) %>% 
+  gather(var, Date, -ID) %>%
+  group_by(ID) %>%
+  distinct() %>%
+  complete(Date = seq.Date(min(Date), max(Date), by = "day")) %>%
+  select(-var) %>% 
+  separate(ID, into = c('site', 'GrowingSeason'), sep = "_") %>%
+  mutate(GSType = 'earlyGS') %>%
+  mutate(GrowingSeason = as.numeric(GrowingSeason)) %>%
+  mutate(weights = 0.5) %>%
+  arrange(site, GrowingSeason, Date)
+
+GSlate<-siteinfo %>%
+  full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>% 
+  mutate(startyr = ifelse(Start > 182, year - 1, (year))) %>% 
+  mutate(normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = '-')) %>% 
+  mutate(normalstart = ymd(normalstart))  %>%
+  mutate(normalend = normalstart + 365) %>%
+  mutate(earlystart = normalstart - 90) %>%
+  mutate(lateend = normalend + 90) %>%
+  select(site, normalend, lateend, year) %>%
+  gather(var, Date, -site, -year) %>%
+  arrange(site, year, Date) %>%
+  mutate(ID = paste(site, year, sep = "_")) %>%
+  select(-site, -year) %>%
+  group_by(ID) %>%
+  distinct() %>%
+  complete(Date = seq.Date((min(Date)), max(Date), by = "day")) %>%
+  select(-var) %>% 
+  separate(ID, into = c('site', 'GrowingSeason'), sep = "_") %>%
+  mutate(GSType = 'lateGS') %>%
+  mutate(GrowingSeason = as.numeric(GrowingSeason)) %>%
+  mutate(weights = 0.5) %>%
+  arrange(site, GrowingSeason, Date)
+
+GScutoffs <- siteinfo %>%
+  full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>% 
+  mutate(startyr = ifelse(Start > 182, year - 1, (year))) %>% 
+  mutate(normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = '-')) %>%
+  mutate(normalstart = ymd(normalstart))  %>% 
+  mutate(normalend = normalstart + 364) %>% 
+  mutate(earlystart = normalstart - 90) %>%
+  mutate(lateend = normalend + 90) %>%
+  select(site, normalstart, normalend, year) %>%
+  rename(GrowingSeason = year)
+
+pheno_early <- inner_join(GSearly, pheno_data_all_1)
+pheno_late <- GSlate %>% inner_join(pheno_data_all_1)
+pheno_normal <- GSmain %>% right_join(pheno_data_all_1)
+
+#so this is the final data, with duped early/late growing season
+pheno_data_all_2 <- bind_rows(pheno_early, pheno_late) %>%
+  bind_rows(pheno_normal) %>%
+  left_join(GScutoffs) %>%
+  arrange(site, GrowingSeason, Date) 
+  
+siteinfo2 <- filter(pheno_data_all_2, GSType == 'mainGS') %>%
+  group_by(site, GrowingSeason) %>%
+  summarise(MIN = min(NDVI), 
+            MAX = max(NDVI)) %>%
+  group_by(site) %>%
+  summarise(avg_ndvi_min = mean(MIN), 
+            avg_ndvi_max = mean(MAX)) %>%
+  mutate(Max50 = (.5 * (avg_ndvi_max - avg_ndvi_min) + avg_ndvi_min)) %>%
+  full_join(siteinfo) 
+
+#to weight by max NDVI
+pheno_data_all <- pheno_normal %>%
+  group_by(site, GrowingSeason) %>%
+  summarise(N = n(),
+            MAXNDVI = max(NDVI),
+            MINNDVI = min(NDVI)) %>%
+  full_join(pheno_data_all_2) %>%
+  mutate(weights = ifelse((NDVI == MAXNDVI & weights == 999), 1, .5))
+
+kable(pheno_data_all %>% group_by(site) %>% 
+        summarise(`Start Date` = min(Date), 
+                  `End Date` = max(Date), 
+                  `N images (w/ shoulders)` = n(),
+                  `Site number` = mean(sitenum),
+                  `Julian GS start date` = mean (Start))  %>% 
+        full_join(siteinfo2) %>%
+        rename(`NDVI Green-up threshold` = Max50) %>%
+        select(`Site number`, site, `Start Date`, `End Date`, `Julian GS start date`, `NDVI Green-up threshold`, `N images (w/ shoulders)`))%>%
+  kable_styling("striped", full_width = F)
+
+```
+
+
+* Then we fit cubic splines to each site-year combo. These splines are weighted (max NDVI in each year = weight 1; all others = weight 0.5), and have a smoothing parameter of 0.5 (spar = 0.5).
+* Each site-year combo must have atleast 10 NDVI readings (measurementscutoff) for us to determine phenological dates. 
+* Some extra critera are added to determining the phenological dates.
+
+  + Green-up:
+    - The first derivative needed to indicate that the NDVI was increasing (first deriv > 0)
+    - The NDVI needed to be above 0 (a low threshold, very easy!)
+    - Green-up date was the FIRST DAY where NDVI was above the green-up threshold + 0.02 NDVI (I forget what all the problems were if it was simply just the cutoff, but they were there)
+    - The green-up date must occur within the "main" growing season (not within the shoulder seasons).
+
+  + Maximum:
+    - Must occur after green-up date but within the "main" growing season (no shoulder seasons)
+    - If there was no green-up date (due to sparse data, no rain, fire, whatever), we still forced a maximum NDVI date
+
+  + Senescense:
+    - The first derivative must be negative (indicating decling function/NDVI)
+    - Must occur after the maximum NDVI date
+    - NDVI must be less than the green-threshold (< Max50) but ABOVE the threshold - 0.05 (ndvi > (Max50 - .05))). Had to do this so that it wouldn't pick a senescence date that had a crazy low NDVI in the event of sparse data. 
+
+* Then all the dates were "redialed" as departure from the average start/end at each site to get change over time
+
+```{r splineseachGS, eval = T, echo = F, message = F, warning = F}
+##################
+# with shoulder data; EACH SITE-YEAR COMBO NEEDS ITS OWN SPLINE. 
+##################
+emptydataframe <- tibble(
+  x = numeric(),
+  ndvi = numeric(),
+  Date = as_date(character()),
+  first.deriv = numeric(),
+  Julian = numeric(),
+  sitenum = numeric(0),
+  site = character(),
+  GrowingSeason = numeric(),
+  Type = character(),
+  gs = numeric(),
+  END = character()
+)
+
+site_summary <- emptydataframe
+for (i in c(1:nrow(siteinfo2))) {
+  a <- i
+  plot.filter <-  pheno_data_all %>% filter(sitenum == a) 
+  gs_summary <- emptydataframe
+  for (i in c((year(min(plot.filter$Date)) + 1):year(max(plot.filter$Date)) )) { #since no GSType shoulder in the first year, so gotta exlude. 
+    gs <- i
+    lowndvi <- (0)
+    measurementscutoff <- 10 #min number of observations to have in gs -->> 7 = way too lax, 10 = better! 
+    gs.filter <- plot.filter %>% filter(GrowingSeason == gs) 
+    
+    spline <- if (nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff ) {
+      smooth.spline(x = gs.filter$Date, y = gs.filter$NDVI, spar = .5, w=gs.filter$weights) 
+    } else {NA} 
+    
+    ndvi <-  if (nrow(filter(gs.filter, GSType=='mainGS')) >= measurementscutoff) {
+      as_tibble(predict(spline, as.numeric(ymd(min(gs.filter$Date))):as.numeric(ymd(max(gs.filter$Date))), deriv = 0)) %>%
+        rename(ndvi = y) %>%
+        mutate(Date = as_date(x)) 
+    } else {NA}
+    
+    first.deriv <- if (nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff) {
+      as_tibble(predict(spline, as.numeric(ymd(min(gs.filter$Date))):as.numeric(ymd(max(gs.filter$Date))), deriv = 1)) %>%
+        rename(first.deriv = y) %>%
+        mutate(norm.first.deriv = ((1--1) / (max(first.deriv) - min(first.deriv)) * (first.deriv - max(first.deriv)) + 1))
+    } else {NA}
+    
+    smoothed.data <- if(nrow(filter(gs.filter, GSType == 'mainGS'))>= measurementscutoff) {
+      full_join(ndvi, first.deriv, by = "x") %>%
+        mutate(Date = as.Date(x)) %>%
+        mutate(change.ndvi = (ndvi - lag(ndvi, n = 1L))) %>%
+        mutate(GrowingSeason = gs) %>%    
+        mutate(Julian = yday(Date)) %>%
+        mutate(sitenum = a) %>%
+        left_join(siteinfo2, by = 'sitenum')
+    } else {emptydataframe}
+    
+    GreenUpDate <- if (nrow(smoothed.data %>% 
+                            filter(first.deriv > 0, 
+                                   ndvi > lowndvi, 
+                                   ndvi < (Max50 + 0.05), #for elliot  + 0.03; for lagoas 0.05
+                                   Date > max(gs.filter$normalstart ), 
+                                   Date < max(gs.filter$normalend - 90))) > 0) { #ethass, start must be 3 mo before end or
+      (smoothed.data %>% filter(first.deriv > 0, 
+                                ndvi > Max50, 
+                                ndvi < (Max50 + .05), 
+                                Date < max(gs.filter$Date[gs.filter$GSType == 'mainGS']),
+                                Date > max(gs.filter$normalstart),
+                                Date < max(gs.filter$normalend - 90)) %>% 
+         .[which.min(.$Date),]) 
+    } else { emptydataframe }
+    if (nrow(GreenUpDate) > 0) { GreenUpDate$Type <- "green-up date" } else { GreenUpDate$Type <- character(0) }
+    if (nrow(GreenUpDate) > 0) { GreenUpDate$gs <- gs } else { GreenUpDate$gs <- numeric(0) }
+    if (nrow(GreenUpDate) > 0) { GreenUpDate$sitenum <- a } else { GreenUpDate$sitenum <- numeric(0) }
+    
+    max <- if (nrow(GreenUpDate) >0 ) {
+      smoothed.data %>% filter(Date > GreenUpDate$Date, 
+                               Date <= max(gs.filter$Date[gs.filter$GSType=='mainGS']) ) %>% 
+        .[which.max(.$ndvi), ]
+    } else {
+      (filter(smoothed.data, 
+              Date > (max(gs.filter$normalstart) + 60),
+              Date < (max(gs.filter$normalend) - 60),
+              change.ndvi > 0 )) %>%
+        .[which.max(.$ndvi),]  }
+    if (nrow(max) > 0) { max$Type <- "max" } else { max$Type <- character(0) }
+    if (nrow(max) > 0) { max$gs <- gs } else { max$gs <- character(0) }
+    if (nrow(max) > 0) { max$sitenum <- a } else { max$sitenum <- numeric(0) }
+    
+    SenescenseDate <- if (nrow(GreenUpDate) > 0) {
+      smoothed.data %>% 
+        filter(first.deriv < 0, 
+               Date > max$Date,
+               Date < max(gs.filter$normalend),
+               ndvi < (Max50 + 0.0), #changed due to elliot 2017 (+0.05)...but jorn says keep it 0, 0 make sense
+               ndvi > (Max50 - .05),
+               Date < max(gs.filter$normalend - 30)) %>% #due to marc 2018...senesence can't really be in the next year...
+        .[which.min(.$Date), ] #jorn made me change this form min to max??
+    } else ({emptydataframe})
+    if (nrow(SenescenseDate) > 0) { SenescenseDate$Type <- "senescence date" } else { SenescenseDate$Type <- character(0) }
+    if (nrow(SenescenseDate) > 0) { SenescenseDate$gs <- gs } else { SenescenseDate$gs <- numeric(0) }
+    if (nrow(SenescenseDate) > 0) { SenescenseDate$sitenum <- a } else { SenescenseDate$sitenum <- numeric(0) }
+    
+       # ggplotly(smoothed.data %>%
+       #        ggplot() +
+       #        geom_hline(yintercept = (0.305 + 0.05)) +
+       #        geom_point(aes(x = Date, y = ndvi))+
+       #        geom_point(aes(x = Date, y = ndvi), col = 'blue', data = filter(smoothed.data,
+       #                                                         first.deriv > 0,
+       #                                                         ndvi > lowndvi,
+       #                                                         ndvi < (0.305 + 0.05),
+       #                                                         Date > ymd("1996-10-21"),
+       #                                                         Date < ymd("1997-10-20") - 90)) +
+       #          geom_point(aes(x = Date, y = NDVI), data = gs.filter, pch = 2)+
+       #          geom_point(aes(x = Date, y = ndvi), data = max, col = "green", size = 5))
+           # ggplotly(smoothed.data %>%
+           #    ggplot() +
+           #    geom_hline(yintercept = (0.134)) +
+           #    geom_point(aes(x = Date, y = ndvi))+
+           #    geom_point(aes(x = Date, y = ndvi), col = 'blue', data = filter(smoothed.data,
+           #                                                     first.deriv < 0,
+           #                                                     Date > max$Date,
+           #                                                     ndvi < (0.134 + 0.05),
+           #                                                     ndvi > (0.134 - 0.05),
+           #                                                     Date < ymd("2001-02-18") - 30)) +
+           #      geom_point(aes(x = Date, y = NDVI), data = gs.filter, pch = 2)+
+           #      geom_point(aes(x = Date, y = ndvi), data = SenescenseDate, col = "green", size = 5))
+
+    pheno.dates <- bind_rows(GreenUpDate, max, SenescenseDate)
+  
+    gs_summary <- bind_rows(pheno.dates, gs_summary)
+  }
+  site_summary <- bind_rows(gs_summary, site_summary)
+}
+
+NutNetPhenoALL <- site_summary %>%
+  select(ndvi, Date, Julian, sitenum, Type, gs) %>%
+  full_join(siteinfo2 %>% select(-Start, -End)) 
+
+NutNetPhenoFILTER1 <- NutNetPhenoALL %>% #if either sos or eos is missing, don't include those years in the average dates of anything
+  select(Julian, gs, site, Type) %>%
+  pivot_wider(names_from = Type, values_from = Julian, id_cols = c(gs, site)) %>%
+  filter(!is.na(`green-up date`), !is.na(`senescence date`)) %>%
+  select(gs, site)
+
+NutNetPhenoFILTER2 <- NutNetPhenoFILTER1 %>% group_by(site) %>%
+  summarise(N = n()) %>%
+  filter(N >= 3) %>% #must have 3 yrs data to use
+  left_join(NutNetPhenoFILTER1)
+
+NutNetPheno <- NutNetPhenoALL %>% 
+  right_join(NutNetPhenoFILTER2)
+
+# NutNetPheno %>% filter(site == "pinj")
+# 
+# NutNetPheno %>% filter(gs >= 2018) %>% 
+#   ggplot(aes(x = Date, y = ndvi, col = Type)) +
+#   geom_point() + theme_cowplot()
+
+#then need to redial dates into radians, to get change
+AVG_nnp<-
+  NutNetPheno %>% 
+  mutate(DaysInYear = ifelse(leap_year(gs) == 'TRUE', 366, 365),
+         DegreeJulian = (Julian / DaysInYear * 360)) %>% 
+  group_by(site, Type) %>%
+  summarise(DateRadianAVG = circmean_degrees(DegreeJulian)) %>%
+  mutate(DateDateAVG = DateRadianAVG * 365 / 360,
+         DDAVG = as_date(DateDateAVG),
+         JulAGV = yday(DDAVG)) %>%
+  select(site, Type, JulAGV) %>% 
+  spread(Type, JulAGV) 
+
+redial<- AVG_nnp %>%
+  full_join( tibble(site = rep(AVG_nnp$site, each = (2019 - 1981)), 
+                    year = rep(1982:2019, (nrow(AVG_nnp)))),  
+             by = 'site') %>% 
+  rename(maxJul = max,
+         sosJul = `green-up date`,
+         eosJul = `senescence date`) %>%
+  full_join(select(siteinfo2, site, Start), by = 'site')  %>% 
+  mutate(startyrGU = ifelse(Start > 182 & sosJul > 182, year - 1, (year)),
+         maxyr = ifelse(Start > 182 & maxJul > Start, year - 1, ifelse(Start < 182 & maxJul < Start, year + 1,  year)),
+         eosyr = ifelse(Start > 182 & eosJul > Start, year - 1, ifelse(Start < 182 & eosJul < Start, year + 1,  year)),
+         SOS = paste(startyrGU, month(as_date(sosJul)), day(as_date(sosJul)), sep = '-'),
+         MAX = paste(maxyr, month(as_date(maxJul)), day(as_date(maxJul)), sep = '-'),
+         EOS = paste(eosyr, month(as_date(eosJul)), day(as_date(eosJul)), sep = '-')) %>% 
+  filter(!is.na(year)) %>% 
+  mutate(SOS=as_date(SOS), 
+         MAX = as_date(MAX), 
+         EOS = as_date(EOS))  %>% 
+  select(site, year, SOS, MAX, EOS) %>%
+  gather(Type, TypicalDate, -site, -year) %>%
+  rename(gs = year) %>%
+  mutate(Type= ifelse(Type=='SOS', 'green-up date', ifelse(Type=='MAX', 'max', 'senescence date'))) %>%
+  right_join(
+    NutNetPheno %>% 
+      select(site, gs, Type, Date) %>% 
+      spread(Type, Date)  %>% 
+      mutate(GU = ifelse(is.na(`senescence date`), NA, `green-up date`)) %>% 
+      mutate(GU = as_date(GU)) %>% 
+      select(-`green-up date`) %>% 
+      rename("green-up date" = GU) %>% 
+      mutate(MAX = ifelse(is.na(`senescence date`), NA, max)) %>% 
+      mutate(MAX = as_date(MAX)) %>% 
+      select(-max) %>%
+      rename("max" = MAX) %>% 
+      gather(Type, Date, -site, -gs) %>%
+      filter(!is.na(Date))  ) %>%  
+  mutate(DIFFERENCE = Date - TypicalDate)  
+
+
+# write full data set
+NutNetPheno_long <- redial %>% 
+  full_join(NutNetPheno) %>%
+  left_join(siteinfo2) %>%
+  select(-Julian, -TroughDateRadian, -avg_ndvi_min) %>% #, -avg_ndvi_max) %>% 
+  rename(DaysFromAvg = DIFFERENCE) %>%
+  arrange(site, gs, Type) %>%
+  select(-Max50, -Start, -End) %>%
+  mutate(Change_ndvi_max = ifelse(Type =="max", (ndvi - avg_ndvi_max), NA)) %>%
+  select(-avg_ndvi_max)
+
+NutNetPheno_long %>% 
+  filter(site == "glac", Type == "green-up date") %>%
+  ggplot(aes(x = gs, y = as.numeric(DaysFromAvg))) +
+  geom_smooth(method = "lm") +
+  geom_point() +
+  labs(x = "Growing season", y = "Change from average, \n Green-up Date", title = "Glac") +
+  theme_cowplot()
+
+NutNetPheno_long %>% filter(Type == "green-up date") %>% arrange(-DaysFromAvg)
+```
+
+- For ploting purposes, the individual year-site combo splines were run again, and all the fitted NDVI values extracted
+
+```{r fittedndvi, eval = T, echo = F, message = F, warning = F}
+#######
+#return all fitted NDVI values
+#####
+full_ndvi_edf <- tibble(
+  x = numeric(),
+  ndvi = numeric(),
+  Date = as_date(character()),
+  sitenum = numeric(0), 
+  gs = numeric())
+
+ndvi_site_summary_edf <- full_ndvi_edf
+
+for (i in c(1:nrow(siteinfo2))) {
+  a <- i
+  plot.filter <- pheno_data_all %>% filter(sitenum == a) 
+  ndvi_gs_summary_edf <- full_ndvi_edf
+  for (i in c(year(min(plot.filter$Date)):year(max(plot.filter$Date)) )) {
+    gs <- i
+    lowndvi <- (0)
+    gs.filter <- plot.filter %>% filter(GrowingSeason == gs) %>%
+      select(GrowingSeason, site, GSType, NDVI, Date, weights)
+    
+    spline <- if (nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff) {
+      smooth.spline(x = gs.filter$Date, y = gs.filter$NDVI, spar = .5, w = gs.filter$weights) 
+    } else {NA}
+    
+    fullndvi_fitting <- if (nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff) {
+      as_tibble(predict(spline, as.numeric(ymd(min(gs.filter$Date))):as.numeric(ymd(max(gs.filter$Date))), deriv = 0)) %>% 
+        rename(ndvi = y) %>% 
+        mutate(Date = as_date(x))
+    } else {full_ndvi_edf}
+    
+    if (nrow(fullndvi_fitting)>0 ) { fullndvi_fitting$sitenum <- a } else { NA}
+    if (nrow(fullndvi_fitting)>0) { fullndvi_fitting$gs <- gs } else { NA }
+    ndvi_gs_summary_edf <- bind_rows(fullndvi_fitting, ndvi_gs_summary_edf)
+  }
+  ndvi_site_summary_edf <- bind_rows(ndvi_gs_summary_edf, ndvi_site_summary_edf)
+}
+
+allfittedndvi <- ndvi_site_summary_edf %>% 
+  left_join(siteinfo2 %>%
+              select(site, sitenum))
+
+NutNetPheno_wide <- NutNetPheno_long %>%
+  dplyr::select(site, gs, Type, DaysFromAvg) %>%
+  spread(Type, DaysFromAvg) %>%
+  rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, ndvi) %>%
+              spread(Type, ndvi) %>%
+              # select(-gsl) %>%
+              rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, Date) %>%
+              spread(Type, Date) %>%
+              #select(-gsl) %>%
+              mutate(GSLength = `senescence date` - `green-up date`) %>%
+              rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
+              filter(Type!= "gsl") %>%
+              pivot_wider(names_from = Type, values_from = TypicalDate) %>%
+              rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
+              mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
+  mutate(ChangeGSL = GSLength - TypicalGSL) %>%
+  filter(!is.na(GSLength)) %>%
+  full_join(NutNetPheno_long %>%
+              filter(Type == "max") %>%
+              dplyr::select(site, gs, Change_ndvi_max))
+
+NutNetPheno_wide %>%
+  arrange(ChangeEOS)
+
+test = "jorn" #comp
+grow = 2004
+#plot of various locations
+ggplotly(allfittedndvi %>% 
+  filter(site == test, gs >=grow) %>% 
+  ggplot(aes(x = Date, y = ndvi)) +
+  geom_point(size = .1) +
+  geom_point(data = filter(pheno_data_all, site == test, GrowingSeason >= grow), aes(y = NDVI), pch = 21) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), panel.grid.major.x = element_line(colour = 'grey')) +
+  geom_point(data = filter(NutNetPheno_long, site == test, gs >= grow), aes(col = Type), size = 2) +
+  theme_cowplot()+
+  labs(title = test)) 
+
+NutNetPheno_long %>% filter(site == test, Type == 'green-up date') %>% arrange(DaysFromAvg)
+```
+
+# This is where csv files pulled from Git can be used
+* Notice that NDVI and ANPP do line up pretty well, it is site specific and sometimes sites don't have that many years. 
+* To really explore trends, I've filtered so that sites must have atleast 10 years of NDVI changes extracted
+
+```{r comboerrrything, eval = T, echo = F, message = F, warning = F}
+write_csv(ClimChange,'./ClimChange.csv') #temp anomalies
+write_csv(yrprod, './NPPINFO.csv') #npp
+PHENO_DATA_ALL <- pheno_data_all %>%
+  rename(gs = GrowingSeason)
+write_csv(pheno_data_all, './NutNetPheno_landsatNDVI.csv')
+write_csv(NutNetPheno_long, './NutNetPheno_long.csv')
+NutNetPheno_wide <- NutNetPheno_long %>%
+  dplyr::select(site, gs, Type, DaysFromAvg) %>%
+  spread(Type, DaysFromAvg) %>%
+  rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, ndvi) %>%
+              spread(Type, ndvi) %>%
+              # select(-gsl) %>%
+              rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, Date) %>%
+              spread(Type, Date) %>%
+              #select(-gsl) %>%
+              mutate(GSLength = `senescence date` - `green-up date`) %>%
+              rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
+              filter(Type!= "gsl") %>%
+              pivot_wider(names_from = Type, values_from = TypicalDate) %>%
+              rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
+              mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
+  mutate(ChangeGSL = GSLength - TypicalGSL) %>%
+  filter(!is.na(GSLength)) %>%
+  full_join(NutNetPheno_long %>%
+              filter(Type == "max") %>%
+              dplyr::select(site, gs, Change_ndvi_max))
+write_csv(NutNetPheno_wide, './NutNetPheno_wide.csv')
+
+
+FilterN10Richness <- NutNetPheno_wide %>%
+  filter(!is.na(GSLength)) %>%
+  group_by(site) %>%
+  summarise(N = n()) %>%
+  filter(N>=10) %>%
+  select(-N) %>%
+  filter(site %in% SiteInfo$site) %>%
+  inner_join(NutNetPheno_long %>%
+               group_by(site) %>%
+               summarise(sitenum = mean(sitenum)))
+write_csv(FilterN10Richness, './FilterN10Richness.csv')
+
+SiteInfoChar <- SiteInfo %>%
+  filter(site %in% FilterN10Richness$site)
+write_csv(SiteInfoChar,'./SiteInfo.csv') #ndep, soil info, habitat, continent, etc
+
+write_csv(allfittedndvi, './NutNetPheno_allfittedNDVI.csv')
+
+```
+
+
+# END HERE
+# MOVE TO ANALYSIS FILE
+
+```{r movetoaanalysisfile}
+
+####
+# # read things if you need to
+####
+FilterN10Richness <- read_csv('./FilterN10Richness.csv') %>%
+  mutate(sitenum2 = row_number())
+SiteInfo <- read_csv('./SiteInfo.csv') %>%
+  filter(site %in% FilterN10Richness$site)
+
+
+SiteInfo %>% 
+  left_join(read_csv("/Users/ellen/Dropbox/NutNet data/sites-02-August-2019.csv") %>%
+  mutate(site = site_code) %>%
+  separate(site, into = c("site", "b"), sep = "[.]") %>%
+  dplyr::select(-b)) %>%
+  dplyr::select(site_name, site_code, continent, country, experiment_type, number_years_active) %>%
+  filter(continent =="Europe") %>%
+  dplyr::select(site_code)
+
+ClimChange <- read_csv('./ClimChange.csv')%>%
+  filter(site %in% FilterN10Richness$site)
+yrprod <- read_csv('./NPPINFO.csv')%>%
+  filter(site %in% FilterN10Richness$site) 
+PHENO_DATA_ALL <- read_csv('./NutNetPheno_landsatNDVI.csv') %>%
+  right_join(FilterN10Richness) %>%
+  dplyr::select(-sitenum)
+NutNetPheno_long <- read_csv('./NutNetPheno_long.csv') %>%
+  right_join(FilterN10Richness) %>%
+  dplyr::select(-sitenum)
+NutNetPheno_wide <- read_csv('./NutNetPheno_wide.csv') %>%
+  right_join( FilterN10Richness ) %>%
+  dplyr::select(-sitenum)
+allfittedndvi <- read_csv('./NutNetPheno_allfittedNDVI.csv')%>%
+  right_join(FilterN10Richness) %>%
+  dplyr::select(-sitenum)
+sites_nutnet <- read_csv('./NutNetGreening_2019.10.15_ee.csv', col_types = cols()) %>%
+  dplyr::select(site_code, "GEE coordinates") %>%
+  separate("GEE coordinates", sep = ',', into = c('long', 'lat')) %>%
+  filter(!is.na(long)) %>%
+  mutate(lat = as.numeric(lat), long = as.numeric(long)) %>%
+  separate(site_code, into = c("site", "b"), sep = "[.]") %>%
+  dplyr::select(-b)
+
+
+####
+# Then start exploring trends
+####
+
+#NDVI plus ANPP
+ANDREWALL <- NutNetPheno_wide %>% 
+  left_join(yrprod) %>%
+  right_join(SiteInfo) %>%
+  mutate(ChangeSOS = as.numeric(ChangeSOS),
+         ChangeMAX = as.numeric(ChangeMAX),
+         ChangeEOS = as.numeric(ChangeEOS),
+         GSLength = as.numeric(GSLength))
+
+ANDREWALL %>%
+  filter(!is.na(ANPP), !is.na(MAXndvi)) %>% 
+  ggplot(aes(x = (ANPP), y = (MAXndvi), col = site)) +
+  geom_point(pch = 21) +
+  scale_x_continuous(trans =log_trans(), breaks = c(1, 5, 10, 50, 100, 400, 1000)) +
+  theme_cowplot() +
+  ylim(0,1) +
+  guides(col = F) +
+  geom_smooth(fill = NA, method = 'lm', col = 'black', formula = y ~ x - 1) +
+  geom_smooth(fill = NA, lwd = .4, method = 'lm') +
+  labs(y = 'Maximum NDVI', x = 'ANPP, Control plots avg. (g/m2)', title = "Max NDVI is okay predictor of ANPP")
+
+summary(lm(ANPP ~ 0 + log(MAXndvi), data = filter(ANDREWALL, !is.na(ANPP), !is.na(MAXndvi)))) #r2 = .27, p<0.001
+
+```
+
+* The goal is to recognize that some area have bigger temp anomolies, have they changed more?
+  + We can look windows BEFORE/during the typical green-up month (1, 2, 3, 4 mos)
+  + And also do windows around the typical date of NDVI max (in both directsion, 1 month window, 3 mo, 5, 7, 9 --> essentially a growing season)
+
+```{r temptrends, eval = T, echo = F, message = F, warning = F}
+###
+# Must make full df with all possible climate change dates (1984 - 2019 growing seasons)
+####
+CLIMYRS <- tibble(gs = rep(c(1984:2019), nrow(FilterN10Richness)),
+       site = rep(FilterN10Richness$site, each = (2019-1983)))
+
+CLIMYRS_ALL <- NutNetPheno_wide %>%
+  group_by(site) %>% summarise(gs = min(gs)) %>%
+  left_join(NutNetPheno_wide %>% select(site, gs, SOStypicaldate, MAXtypicaldate, EOStypicaldate)) %>%
+  mutate(typicalGSL = EOStypicaldate - SOStypicaldate) %>%
+  dplyr::select(-EOStypicaldate) %>%
+  mutate(SOStypicalDAY = day(SOStypicaldate),
+         SOStypicalMONTH = month(SOStypicaldate),
+         MAXtypicalDAY = day(MAXtypicaldate),
+         MAXtypicalMONTH = month(MAXtypicaldate),
+         SOStypicalYEAR = ifelse(year(SOStypicaldate)==gs, "GS", 
+                                 ifelse(year(SOStypicaldate) == (gs-1), "GS-1", NA)),
+         MAXtypicalYEAR = ifelse(year(MAXtypicaldate)==gs, "GS",
+                                 ifelse(year(MAXtypicaldate) == (gs - 1), "GS-1", NA))) %>%
+  dplyr::select(-gs, -SOStypicaldate, -MAXtypicaldate) %>%
+  full_join(CLIMYRS) %>%
+  mutate(TYPICALSOS = ymd(paste(ifelse(SOStypicalYEAR == "GS", gs, 
+                                       ifelse(SOStypicalYEAR == "GS-1", (gs - 1), NA)), SOStypicalMONTH, SOStypicalDAY, sep = "-")),
+         TYPICALMAX = ymd(paste(ifelse(MAXtypicalYEAR == "GS", gs, 
+                                      ifelse(MAXtypicalYEAR == "GS-1", (gs - 1), NA)), MAXtypicalMONTH, MAXtypicalDAY, sep = "-"))) %>%
+  select(site, gs, TYPICALSOS, TYPICALMAX, typicalGSL) 
+
+#####
+# Window around SOS date, preceding only
+#####
+#MONTH
+clim_month_soswindow <- CLIMYRS_ALL %>% 
+  select(site, gs, TYPICALSOS) %>%
+  mutate(SOS_typical = month(TYPICALSOS),
+         SOS_typical_sub1  = month(TYPICALSOS - 30),
+         SOS_typical_sub2  = month(TYPICALSOS - 60),
+         SOS_typical_sub3  = month(TYPICALSOS - 90),
+         SOS_typical_sub4  = month(TYPICALSOS - 120)) %>%
+  gather(-site, -gs, -TYPICALSOS, key = "TYPE", value = "MONTH")
+#YEAR
+clim_year_soswindow <- CLIMYRS_ALL %>% 
+  select(site, gs, TYPICALSOS) %>%
+  mutate(SOS_typical = year(TYPICALSOS),
+         SOS_typical_sub1 = year(TYPICALSOS - 30),
+         SOS_typical_sub2 = year(TYPICALSOS - 60),
+         SOS_typical_sub3 = year(TYPICALSOS - 90),
+         SOS_typical_sub4 = year(TYPICALSOS - 120))  %>%
+  gather(-site, -gs, -TYPICALSOS, key = "TYPE", value = "YEAR")
+
+ee_clim_soswindow <- full_join(clim_month_soswindow, clim_year_soswindow) %>%
+  left_join(ClimChange %>%
+            mutate(MONTH = month(plotdate),
+                   YEAR = year(plotdate))) %>%
+  select(site, gs, TYPE, TempDifference) %>%
+  pivot_wider(names_from = TYPE, values_from = TempDifference) %>%
+  rowwise() %>%
+  mutate(anom_1mo = SOS_typical,
+         anom_2mo = (anom_1mo + SOS_typical_sub1),
+         anom_3mo = anom_2mo + SOS_typical_sub2,
+         anom_4mo = anom_3mo + SOS_typical_sub3,
+         anom_5mo = anom_4mo + SOS_typical_sub4) %>%
+  full_join(NutNetPheno_wide)
+
+
+#####
+# Window around MAX date
+#####
+#MONTH
+clim_month_maxwindow <- CLIMYRS_ALL %>% 
+  select(site, gs, TYPICALMAX) %>%
+  mutate(MAX_typical = month(TYPICALMAX),
+         MAX_typical_sub1  = month(TYPICALMAX - 30),
+         MAX_typical_plus1  = month(TYPICALMAX + 30),
+         MAX_typical_sub2  = month(TYPICALMAX - 60),
+         MAX_typical_plus2  = month(TYPICALMAX + 60),
+         MAX_typical_sub3  = month(TYPICALMAX - 90),
+         MAX_typical_plus3  = month(TYPICALMAX + 90),
+         MAX_typical_sub4  = month(TYPICALMAX - 120),
+         MAX_typical_plus4  = month(TYPICALMAX + 120)) %>%
+  gather(-site, -gs, -TYPICALMAX, key = "TYPE", value = "MONTH")
+#YEAR
+clim_year_maxwindow <- CLIMYRS_ALL %>% 
+  select(site, gs, TYPICALMAX) %>% 
+  mutate(MAX_typical = year(TYPICALMAX),
+         MAX_typical_sub1 = year(TYPICALMAX - 30),
+         MAX_typical_plus1 = year(TYPICALMAX + 30),
+         MAX_typical_sub2 = year(TYPICALMAX - 60),
+         MAX_typical_plus2 = year(TYPICALMAX + 60),
+         MAX_typical_sub3 = year(TYPICALMAX - 90),
+         MAX_typical_plus3 = year(TYPICALMAX + 90),
+         MAX_typical_sub4 = year(TYPICALMAX - 120),
+         MAX_typical_plus4 = year(TYPICALMAX + 120))  %>%
+  gather(-site, -gs, -TYPICALMAX, key = "TYPE", value = "YEAR")
+
+ee_clim_maxwindow <- full_join(clim_month_maxwindow, clim_year_maxwindow) %>%
+  left_join(ClimChange %>%
+            mutate(MONTH = month(plotdate),
+                   YEAR = year(plotdate))) %>%
+  select(site, gs, TYPE, TempDifference) %>%
+  pivot_wider(names_from = TYPE, values_from = TempDifference) %>%
+  rowwise() %>%
+  mutate(anom_1mo = MAX_typical, 
+         anom_3mo = (MAX_typical + MAX_typical_sub1 + MAX_typical_plus1),
+         anom_5mo = anom_3mo + MAX_typical_sub2 + MAX_typical_plus2,
+         anom_7mo = anom_5mo + MAX_typical_sub3 + MAX_typical_plus3,
+         anom_9mo = anom_7mo + MAX_typical_sub4 + MAX_typical_plus4) %>%
+  full_join(NutNetPheno_wide) #%>%
+  # mutate(TypicalGSL = EOStypicaldate - SOStypicaldate,
+         # ChangeGSL = GSLength - TypicalGSL)
+
+
+###
+# Programatically look at temp changes
+###
+climdataframe <- tibble(
+  site = numeric(), 
+  sos1moF = numeric(), sos1moP = numeric(),
+  sos2moF = numeric(), sos2moP = numeric(), sos2moSLOPE = numeric(),
+  sos3moF = numeric(), sos3moP = numeric(),
+  sos4moF = numeric(), sos4moP = numeric(),
+  max1moF = numeric(), max1moP = numeric(),
+  max3moF = numeric(), max3moP = numeric(),
+  max5moF = numeric(), max5moP = numeric(), max5moSLOPE = numeric(),
+  max7moF = numeric(), max7moP = numeric(),
+  max9moF = numeric(), max9moP = numeric())
+
+climate_anom <- ee_clim_maxwindow %>%
+  select(site, gs, anom_1mo, anom_3mo, anom_5mo, anom_7mo, anom_9mo) %>%
+  gather(-site, -gs, key = Type, value = TempAnom) %>%
+  mutate(Type = paste0(Type, "_max")) %>%
+  bind_rows( ee_clim_soswindow %>%
+               select(site, gs, anom_1mo, anom_2mo, anom_3mo, anom_4mo, anom_5mo) %>%
+               gather(-site, -gs, key = Type, value = TempAnom) %>%
+               mutate(Type = paste0(Type, "_sos"))) %>%
+  full_join(FilterN10Richness) %>% select(-sitenum)
+
+clim_statssite_summary <- climdataframe
+for (i in c(1:nrow(FilterN10Richness))) {
+  a <- i
+  sitefilter <- climate_anom %>% filter(sitenum2 == a)
+  
+  max1mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {
+    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_1mo_max')))
+  } else {max1mo_mod <- statsdataframe}
+  max1moF <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {Anova(max1mo_mod)$`F value`[1]} else {NA}
+  max1moP <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {Anova(max1mo_mod)$`Pr(>F)`[1]} else {NA}
+  
+  max3mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_3mo_max')))
+  } else {max3mo_mod <- statsdataframe}
+  max3moF <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {max3mo_mod$`F value`[1]} else {NA}
+  max3moP <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {max3mo_mod$`Pr(>F)`[1]} else {NA}
+
+  max5mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {
+    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_5mo_max')))
+  } else {max5mo_mod <- statsdataframe}
+  max5moF <-   if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {Anova(max5mo_mod)$`F value`[1]} else {NA}
+  max5moP <-   if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {Anova(max5mo_mod)$`Pr(>F)`[1]} else {NA}
+  max5moSLOPE <- if (nrow(filter(sitefilter, Type == "anom_5mo_max")) > 2) { max5mo_mod$coefficients[2] } else {NA}
+
+  max7mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_7mo_max')))
+  } else {max7mo_mod <- statsdataframe}
+  max7moF <-   if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {max7mo_mod$`F value`[1]} else {NA}
+  max7moP <-   if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {max7mo_mod$`Pr(>F)`[1]} else {NA}
+
+  max9mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_9mo_max')))
+  } else {max9mo_mod <- statsdataframe}
+  max9moF <-   if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {max9mo_mod$`F value`[1]} else {NA}
+  max9moP <-   if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {max9mo_mod$`Pr(>F)`[1]} else {NA}
+
+  sos1mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_1mo_sos')))
+  } else {sos1mo_mod <- statsdataframe}
+  sos1moF <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {sos1mo_mod$`F value`[1]} else {NA}
+  sos1moP <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {sos1mo_mod$`Pr(>F)`[1]} else {NA}
+        
+  sos2mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {
+    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_2mo_sos')))
+  } else {sos2mo_mod <- statsdataframe}
+  sos2moF <-   if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {Anova(sos2mo_mod)$`F value`[1]} else {NA}
+  sos2moP <-   if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {Anova(sos2mo_mod)$`Pr(>F)`[1]} else {NA}
+  sos2moSLOPE <- if (nrow(filter(sitefilter, Type == "anom_2mo_sos")) > 2) { sos2mo_mod$coefficients[2] } else {NA}
+        
+  sos3mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_3mo_sos')))
+  } else {sos3mo_mod <- statsdataframe}
+  sos3moF <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {sos3mo_mod$`F value`[1]} else {NA}
+  sos3moP <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {sos3mo_mod$`Pr(>F)`[1]} else {NA}
+        
+  sos4mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_4mo_sos')))
+  } else {sos4mo_mod <- statsdataframe}
+  sos4moF <-   if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {sos4mo_mod$`F value`[1]} else {NA}
+  sos4moP <-   if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {sos4mo_mod$`Pr(>F)`[1]} else {NA}
+        
+  CLIMstats <- tibble(a, 
+                  sos1moF, sos1moP,
+                  sos2moF, sos2moP, sos2moSLOPE, 
+                  sos3moF, sos3moP,
+                  sos4moF, sos4moP,
+                  max1moF, max1moP,
+                  max3moF, max3moP,
+                  max5moF, max5moP, max5moSLOPE, 
+                  max7moF, max7moP,
+                  max9moF, max9moP)
+  clim_statssite_summary <- rbind (CLIMstats, clim_statssite_summary)
+}
+
+climfinalstats <- (dplyr::select(clim_statssite_summary, a,  sos1moF, sos2moF,sos3moF, sos4moF, 
+                                 max1moF, max3moF, max5moF, max7moF,max9moF) %>% 
+                     gather(Type, Value, -a) %>% 
+                     mutate(Stat = 'F value')) %>%
+  bind_rows((dplyr::select(clim_statssite_summary, a, sos1moP, sos2moP,sos3moP, sos4moP, max1moP, max3moP, max5moP, max7moP,max9moP) %>% 
+               gather(Type, Value, -a) %>% 
+               mutate(Stat = 'P value'))) %>%
+  bind_rows(select(clim_statssite_summary, a, max5moSLOPE, sos2moSLOPE) %>%
+              gather(Type, Value, -a) %>%
+              mutate(Stat = "Slope")) %>%
+  rename(sitenum2 = a) %>%
+  mutate(Type = recode(Type, "sos1moF" = "anom_1mo_sos", "sos1moP" = "anom_1mo_sos",
+                       "sos2moF" = "anom_2mo_sos", "sos2moP" = "anom_2mo_sos", "sos2moSLOPE" = "anom_2mo_sos",
+                       "sos3moF" = "anom_3mo_sos", "sos3moP" = "anom_3mo_sos",
+                       "sos4moF" = "anom_4mo_sos", "sos4moP" = "anom_4mo_sos",
+                       "max1moF" = "anom_1mo_max", "max1moP" = "anom_1mo_max",
+                       "max3moF" = "anom_3mo_max", "max3moP" = "anom_3mo_max",
+                       "max5moF" = "anom_5mo_max", "max5moP" = "anom_5mo_max", "max5moSLOPE" = "anom_5mo_max",
+                       "max7moF" = "anom_7mo_max", "max7moP" = "anom_7mo_max",
+                       "max9moF" = "anom_9mo_max", "max9moP" = "anom_9mo_max")) %>%
+  full_join((FilterN10Richness %>% select(-sitenum)))  %>% 
+  dplyr::select(-sitenum2) %>%
+  full_join(climate_anom) %>%
+  mutate(includeCHANGE = ifelse(Stat == 'P value' & Value <= 0.05, 'sig', 'ns')) %>%
+  filter(Stat != "F value")
+
+
+# climfinalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'anom_2mo_sos', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = TempAnom)) +
+#   geom_hline(yintercept = 0, lty = 2)+
+#   geom_point() +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   facet_wrap(~site) +
+#   theme_cowplot() +
+#   labs(x='Growing Season', y='Temp anom (2 month window around typical SOS)')
+# 
+# 
+# climfinalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'anom_5mo_max', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = TempAnom)) +
+#   geom_hline(yintercept = 0, lty = 2)+
+#   geom_point() +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   facet_wrap(~site) +
+#   theme_cowplot() +
+#   labs(x='Growing Season', y='Temp anom (5 month window around typical MAX)')
+
+```
+
+* First, it might be good to see which sites have had changes in pehno dates tho
+- programatically determine which sites have sigificant trends in green-up/senescence
+
+```{r phenotrends, eval = T, echo = F, message = F, warning = F}
+#all P values
+statsdataframe <- tibble(
+  site = numeric(), 
+  sosF = numeric(), sosP = numeric(), sosSLOPE = numeric(),
+  eosF = numeric(), eosP = numeric(), 
+  gslF = numeric(), gslP = numeric(), gslSLOPE = numeric(), 
+  maxndviF = numeric(), maxndviP = numeric(), maxNDVISLOPE = numeric())
+
+changedf <- ANDREWALL %>% dplyr::select(site, gs, ChangeSOS, ChangeEOS, ChangeGSL, Change_ndvi_max) %>% 
+  gather(Type, Change, -gs, -site) %>% 
+  left_join(FilterN10Richness)
+
+statssite_summary <- statsdataframe
+
+for (i in c(1:nrow(FilterN10Richness))) {
+  a <- i
+  sitefilter <- changedf %>% filter(sitenum2 == a)
+  
+  sosmod<-if (nrow(filter(sitefilter, Type == 'ChangeSOS')) > 2) {
+    lm(Change ~ gs, data = filter(sitefilter, Type == 'ChangeSOS'))
+  } else {sosmod <- statsdataframe}
+   sosF <-   if (nrow(filter(sitefilter, Type == 'ChangeSOS')) > 2) {Anova(sosmod)$`F value`[1]} else {NA}
+   sosP <-   if (nrow(filter(sitefilter, Type == 'ChangeSOS')) > 2) {Anova(sosmod)$`Pr(>F)`[1]} else {NA}
+  sosSLOPE <- if (nrow(filter(sitefilter, Type == "ChangeSOS")) > 2) { sosmod$coefficients[2] } else {NA}
+
+  eosmod<-if (nrow(filter(sitefilter, Type == 'ChangeEOS')) > 2) {
+    Anova(lm(Change ~ gs, data = filter(sitefilter, Type == 'ChangeEOS')))
+  } else {eosmod <- statsdataframe}
+  eosF <-   if (nrow(filter(sitefilter, Type == 'ChangeEOS'))>2) {eosmod$`F value`[1]} else {NA}
+  eosP <-   if (nrow(filter(sitefilter, Type == 'ChangeEOS')) > 2) {eosmod$`Pr(>F)`[1]} else {NA}
+  
+  gslmod<-if (nrow(filter(sitefilter, Type == 'ChangeGSL')) > 2) {
+    (lm(Change ~ gs, data = filter(sitefilter, Type == 'ChangeGSL')))
+  } else {gslmod <- statsdataframe}
+  gslF <-   if (nrow(filter(sitefilter, Type == 'ChangeGSL')) > 2) {Anova(gslmod)$`F value`[1]} else {NA}
+  gslP <-   if (nrow(filter(sitefilter, Type == 'ChangeGSL')) > 2) {Anova(gslmod)$`Pr(>F)`[1]} else {NA}
+  gslSLOPE <- if (nrow(filter(sitefilter, Type == "ChangeGSL")) > 2) { gslmod$coefficients[2] } else {NA}
+  
+  maxndvimod<-if (nrow(filter(sitefilter, Type == 'Change_ndvi_max')) > 2) {
+    (lm(Change ~ gs, data = filter(sitefilter, Type == 'Change_ndvi_max')))
+  } else {gslmod <- statsdataframe}
+  maxndviF <-   if (nrow(filter(sitefilter, Type == 'Change_ndvi_max')) > 2) {Anova(maxndvimod)$`F value`[1]} else {NA}
+  maxndviP <-   if (nrow(filter(sitefilter, Type == 'Change_ndvi_max')) > 2) {Anova(maxndvimod)$`Pr(>F)`[1]} else {NA}  
+  maxNDVISLOPE <- if (nrow(filter(sitefilter, Type == "Change_ndvi_max")) > 2) { maxndvimod$coefficients[2] } else {NA}
+  
+  stats <- tibble(a, sosF, sosP, sosSLOPE, eosF, eosP, gslF, gslP, gslSLOPE, maxndviF, maxndviP, maxNDVISLOPE)
+  statssite_summary <- rbind (stats, statssite_summary)
+}
+
+
+finalstats <- (dplyr::select(statssite_summary, a, sosF, eosF, gslF, maxndviF) %>% 
+                  gather(Type, Value, -a) %>% mutate(Stat = 'F value')) %>%
+  bind_rows((dplyr::select(statssite_summary, a, sosP, eosP, gslP, maxndviP) %>% 
+               gather(Type, Value, -a) %>% 
+               mutate(Stat = 'P value'))) %>%
+  bind_rows(select(statssite_summary, a, sosSLOPE, gslSLOPE, maxNDVISLOPE) %>%
+              gather(Type, Value, -a) %>%
+              mutate(Stat = "Slope")) %>%
+  rename(sitenum2 = a) %>%
+  mutate(Type = ifelse(Type == 'sosF' | Type == 'sosP' | Type == "sosSLOPE", 'sos',
+                       ifelse(Type == 'eosF' | Type == 'eosP', 'eos',
+                                     ifelse(Type == 'gslF' | Type == 'gslP' | Type == "gslSLOPE", 'gsl', 
+                                            ifelse(Type =="maxndviF" | Type == "maxndviP" | Type == "maxNDVISLOPE", "maxndvi", NA))))) %>%
+  full_join((FilterN10Richness %>% select(-sitenum)))  %>% 
+  dplyr::select(Type, Value, Stat, site ) %>%
+  full_join(ANDREWALL %>% dplyr::select(site, gs, ChangeEOS, ChangeSOS, ChangeGSL, Change_ndvi_max) %>% 
+               gather(Type, CHANGE, -gs, -site) %>% 
+               mutate(Type = ifelse(Type == 'ChangeEOS', 'eos', 
+                                           ifelse(Type == 'ChangeSOS', 'sos', 
+                                                  ifelse(Type == "ChangeGSL", "gsl",
+                                                         ifelse(Type == "Change_ndvi_max", "maxndvi", NA))))))  %>%
+  mutate(includeCHANGE = ifelse(Stat == 'P value' & Value <= 0.05, 'sig', 'ns')) %>%
+  filter(Stat != "F value")
+
+#sos plot
+ # (finalstats %>% filter(Type=='sos', !is.na(Value))  %>% ggplot(aes(x=gs, y=CHANGE, col=ifelse(includeCHANGE=='sig', site, ' ns'))) +
+ #    geom_point(aes(pch=includeCHANGE, size = ifelse(includeCHANGE=='sig',1,1))) + #2,1
+ #    geom_smooth(data = filter(finalstats, includeCHANGE=='sig', Type=='sos'), method='lm',fill=NA, aes(group=site, col = ifelse(includeCHANGE=='sig', site, ' ns'))) + 
+ #    geom_smooth(data = filter(finalstats, Type=='sos'), method='lm', col = 'black', aes(group = NA))  +
+ #   labs(col='Site', shape ='Significance', size = 'Significance', y='Green-up day of year') + guides(size=FALSE)+
+ #   scale_shape_manual(values = c(21,19))) +theme_cowplot() +labs(y = 'Change in Green-up', x='Growing Season')
+
+# SOSPLOT <- finalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'sos', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = CHANGE)) +
+#   geom_hline(yintercept = 0, lty = 2)+
+#   geom_point() +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   facet_wrap(~site) +
+#   theme_cowplot() +
+#   labs(x='Growing Season', y='Change in Green-up (days)')
+#  ggsave("./sigSOSplot.pdf", SOSPLOT,dpi=600,width=12,height=7,units='in')
+# 
+#  
+#  #eos plot
+# EOSPLOT <- finalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'eos', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = CHANGE)) +
+#   geom_hline(yintercept = 0, lty = 2)+
+#   geom_point() +
+#   geom_smooth(method = 'lm', fill = NA, col = 'black') +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   facet_wrap( ~ site) + 
+#   theme_cowplot() +
+#   labs(x = 'Growing Season', y = 'Change in Senescence (days)')
+# # ggsave("./sigEOSplot.pdf", EOSPLOT,dpi=600,width=12,height=7,units='in')
+# 
+#  
+# #gsl plot
+# GSLPLOT <- finalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'gsl', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = CHANGE)) +
+#   geom_point() +
+#   geom_smooth(method = 'lm', fill = NA, col = 'black') +
+#   facet_wrap( ~ site) +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   theme_cowplot() +
+#   labs(x = 'Growing Season', y = 'Growing season length (days)')
+# # ggsave("./sigGSLplot.pdf", GSLPLOT,dpi=600,width=12,height=7,units='in')
+# 
+# #maxndvi plot
+# MAXNDVIPLOT<-finalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'maxndvi', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = CHANGE)) +
+#   geom_point() +
+#   geom_smooth(method = 'lm', fill = NA, col = 'black') +
+#   facet_wrap( ~ site) +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   theme_cowplot() +
+#   labs(x = 'Growing Season', y = 'Change in Max NDVI')
+#  ggsave("./sigMaxNDVIplot.pdf", MAXNDVIPLOT,dpi=600,width=18,height=20,units='in')
+# 
+# 
+# SOSPLOT
+# EOSPLOT
+# GSLPLOT
+# MAXNDVIPLOT
+
+```
+
+
+- Also interesting to look at yearly deviations in GS lenght + climate anomoly
+
+```{r}
+
+#all P values
+ANOM_statsdataframe <- tibble(
+  site = numeric(), 
+  sos_sos2motemp_F = numeric(), sos_sos2motemp_P = numeric(), sos_sos2motemp_SLOPE = numeric(),
+  gsl_max5motemp_F = numeric(), gsl_max5motemp_P = numeric(), gls_max5motemp_SLOPE = numeric(),
+  maxNDVI_max5motemp_F = numeric(), maxNDVI_max5motemp_P = numeric(), maxNDVI_max5motemp_SLOPE = numeric(),
+  gsl_maxNDVI_F = numeric(), gsl_maxNDVI_P = numeric(), gsl_maxNDVI_SLOPE = numeric())
+
+
+eachyr <- climate_anom %>% 
+  pivot_wider(values_from = TempAnom, names_from = Type) %>%
+  inner_join(ANDREWALL) %>%
+  select(site, gs, sitenum2, 
+         ChangeSOS, anom_2mo_sos, 
+         ChangeGSL, anom_5mo_max,
+         GSLength, Change_ndvi_max)
+
+
+anom_statssite_summary <- ANOM_statsdataframe
+for (i in c(1:nrow(FilterN10Richness))) {
+  a <- i
+  sitefilter <- eachyr %>% filter(sitenum2 == a)
+  
+  anom_sosmod<-if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {
+    lm(ChangeSOS ~ anom_2mo_sos, data = filter(sitefilter))
+  } else {anom_sosmod <- ANOM_statsdataframe}
+   sos_sos2motemp_F <-   if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {Anova(anom_sosmod)$`F value`[1]} else {NA}
+   sos_sos2motemp_P <-   if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {Anova(anom_sosmod)$`Pr(>F)`[1]} else {NA}
+  sos_sos2motemp_SLOPE <- if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) { anom_sosmod$coefficients[2] } else {NA}
+  
+  anom_maxmod<-if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {
+    lm(ChangeGSL ~ anom_5mo_max, data = filter(sitefilter))
+  } else {anom_maxmod <- ANOM_statsdataframe}
+   gsl_max5motemp_F <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(anom_maxmod)$`F value`[1]} else {NA}
+   gsl_max5motemp_P <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(anom_maxmod)$`Pr(>F)`[1]} else {NA}
+   gsl_max5motemp_SLOPE <- if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) { anom_maxmod$coefficients[2] } else {NA}
+  
+  anom_maxNDVImod<-if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {
+    lm(Change_ndvi_max ~ anom_5mo_max, data = filter(sitefilter))
+  } else {anom_maxNDVImod <- ANOM_statsdataframe}
+   maxNDVI_max5motemp_F <-   if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {Anova(anom_maxNDVImod)$`F value`[1]} else {NA}
+   maxNDVI_max5motemp_P <-   if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {Anova(anom_maxNDVImod)$`Pr(>F)`[1]} else {NA}
+  maxNDVI_max5motemp_SLOPE <- if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) { anom_maxNDVImod$coefficients[2] } else {NA}
+  
+  gsl_maxNDVImod<-if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {
+    lm(Change_ndvi_max ~ ChangeGSL, data = filter(sitefilter))
+  } else {gsl_maxNDVImod <- ANOM_statsdataframe}
+   gsl_maxNDVI_F <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(gsl_maxNDVImod)$`F value`[1]} else {NA}
+   gsl_maxNDVI_P <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(gsl_maxNDVImod)$`Pr(>F)`[1]} else {NA}
+   gsl_maxNDVI_SLOPE <- if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) { gsl_maxNDVImod$coefficients[2] } else {NA}  
+  
+  
+  stats <- tibble(a, sos_sos2motemp_F, sos_sos2motemp_P, sos_sos2motemp_SLOPE,
+                  gsl_max5motemp_F, gsl_max5motemp_P, gsl_max5motemp_SLOPE,
+                  maxNDVI_max5motemp_F, maxNDVI_max5motemp_P, maxNDVI_max5motemp_SLOPE,
+                  gsl_maxNDVI_F, gsl_maxNDVI_P, gsl_maxNDVI_SLOPE)
+  anom_statssite_summary <- rbind (stats, anom_statssite_summary)
+}
+
+ANOM_finalstats <- (dplyr::select(anom_statssite_summary, a, sos_sos2motemp_F, gsl_max5motemp_F, maxNDVI_max5motemp_F, gsl_maxNDVI_F) %>% 
+                  gather(Type, Value, -a) %>% mutate(Stat = 'F value')) %>%
+  bind_rows((dplyr::select(anom_statssite_summary, a, sos_sos2motemp_P, gsl_max5motemp_P, maxNDVI_max5motemp_P, gsl_maxNDVI_P) %>% 
+               gather(Type, Value, -a) %>% 
+               mutate(Stat = 'P value'))) %>%
+  bind_rows((dplyr::select(anom_statssite_summary, a, sos_sos2motemp_SLOPE, gsl_max5motemp_SLOPE, maxNDVI_max5motemp_SLOPE, gsl_maxNDVI_SLOPE) %>% 
+               gather(Type, Value, -a) %>% 
+               mutate(Stat = 'Slope'))) %>%
+  rename(sitenum2 = a) %>%
+  mutate(Type = ifelse(Type == 'sos_sos2motemp_F' | Type == 'sos_sos2motemp_P' | Type == "sos_sos2motemp_SLOPE", 'sosChange_sos2motemp',
+                       ifelse(Type == 'gsl_max5motemp_F' | Type == 'gsl_max5motemp_P' | Type =="gsl_max5motemp_SLOPE", 'gslChange_max5motemp',
+                              ifelse(Type == "maxNDVI_max5motemp_F" | Type =="maxNDVI_max5motemp_P" | Type =="maxNDVI_max5motemp_SLOPE", "maxNDVIChange_max5motemp", 
+                                     ifelse(Type =="gsl_maxNDVI_F" |Type =="gsl_maxNDVI_P"|Type =="gsl_maxNDVI_SLOPE", "gsl_maxNDVI", NA))))) %>% 
+  full_join((FilterN10Richness %>% select(-sitenum)))  %>% 
+  dplyr::select(Type, Value, Stat, site ) %>%
+  pivot_wider(names_from = Stat, values_from = Value) %>%
+  mutate(sig = ifelse(`P value` <= 0.05 & Slope < 0, "-", 
+                      ifelse(`P value` <= 0.05 & Slope > 0 , "+",
+                             ifelse(`P value` > 0.05, "o", NA)))) %>%
+  full_join(eachyr)
+
+ANOM_finalstats %>% filter(Type =="gslChange_max5motemp") %>%
+  ggplot(aes(x = anom_5mo_max, y = ChangeGSL, col = site)) +
+  geom_point(pch = 21, col = "grey60")+
+  guides(col = F)+
+  geom_smooth(method = 'lm', data = filter(ANOM_finalstats, Type =="gslChange_max5motemp",  sig!="o"), fill = NA, lty = 2, lwd = .5) +
+  # geom_smooth(method = "lm", data = filter(ANOM_finalstats, sig !="o"), col = "black", fill = NA)+
+  theme_cowplot() +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60")+
+  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
+    scale_color_manual(values = rep(c(1), 68))
+ANOM_finalstats %>% filter(Type =="gslChange_max5motemp") %>% 
+  group_by(site) %>%
+  summarise(gs = min(gs)) %>%
+  inner_join(ANOM_finalstats %>%
+               filter(Type =="gslChange_max5motemp")) %>%
+  group_by(sig) %>% summarise(gslChange_max5motemp = n())
+
+
+ANOM_finalstats %>% filter(Type =="sosChange_sos2motemp") %>%
+  ggplot(aes(x = anom_2mo_sos, y = ChangeSOS, col = site)) +
+  geom_point(pch = 21, col = "grey60")+
+  guides(col = F)+
+  geom_smooth(method = 'lm', data = filter(ANOM_finalstats, Type =="sosChange_sos2motemp",  sig!="o"), fill = NA, lty = 2, lwd = .5) +
+  # geom_smooth(method = "lm", data = filter(ANOM_finalstats, sig !="o"), col = "black", fill = NA)+
+  theme_cowplot() +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60")+
+  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
+    scale_color_manual(values = rep(c(1), 68))+
+  labs(x = "Green-up temp anamoly (°C)", y = "Change in green-up date (days)")
+
+
+ANOM_finalstats %>% filter(Type =="sosChange_sos2motemp") %>% 
+  group_by(site) %>%
+  summarise(gs = min(gs)) %>%
+  inner_join(ANOM_finalstats %>%
+               filter(Type =="sosChange_sos2motemp")) %>%
+  group_by(sig) %>% summarise(N = n())
+
+
+```
+
+
+
+- Make a table of all the sites that see changes in things
+
+```{r}
+PHENO_TABLE <- finalstats %>% 
+  filter(Stat == "P value") %>%
+  mutate(binary = ifelse(includeCHANGE == "ns", 0, ifelse(includeCHANGE=='sig',1,NA))) %>%
+  group_by(Type, site) %>%
+  summarise(SIG = mean(binary)) %>%
+  pivot_wider(names_from = Type, values_from = SIG) %>%
+  rename(sosDATE = sos,
+         eosDATE = eos, 
+         gslDAYS = gsl,
+         maxNDVI = maxndvi) %>%
+  full_join(finalstats %>% filter(Stat == "Slope") %>%
+              group_by(site, Type) %>%
+              summarise(SLOPE = mean(Value)) %>%
+              pivot_wider(names_from = Type, values_from = SLOPE) %>%
+              rename(sosSlope = sos,
+                     gslSlope = gsl,
+                     maxndviSlope = maxndvi)) %>%
+  mutate(gslDAYS = ifelse(gslDAYS == 1 & gslSlope < 0, "-",
+                          ifelse(gslDAYS == 1 & gslSlope > 0, "+", "o"))) %>%
+  mutate(sosDATE = ifelse(sosDATE == 1 & sosSlope < 0, "-",
+                          ifelse(sosDATE == 1 & sosSlope > 0, "+", "o"))) %>%
+  mutate(maxNDVI = ifelse(maxNDVI == 1 & maxndviSlope < 0 , "-",
+                          ifelse(maxNDVI == 1 & maxndviSlope > 0, "+", "o")))
+
+CLIM_TABLE <- climfinalstats %>% 
+   filter(Stat == "P value") %>%
+   mutate(binary = ifelse(includeCHANGE == "ns", 0, ifelse(includeCHANGE=='sig',1,NA))) %>%
+   group_by(Type, site) %>%
+   summarise(SIG = mean(binary)) %>% 
+   pivot_wider(names_from = Type, values_from = SIG) %>%
+   select(site, anom_5mo_max, anom_2mo_sos) %>%
+  full_join( climfinalstats %>% filter(Stat == "Slope") %>%
+              group_by(site, Type) %>%
+              summarise(SLOPE = mean(Value)) %>%
+              pivot_wider(names_from = Type, values_from = SLOPE) %>%
+              rename(Max5moSlope = anom_5mo_max,
+                     Sos2moSlope = anom_2mo_sos)) %>%
+  mutate(anom_5mo_max = ifelse(anom_5mo_max == 1 & Max5moSlope < 0, "-",
+                          ifelse(anom_5mo_max == 1 & Max5moSlope > 0, "+", "o")))  %>%
+  mutate(anom_2mo_sos = ifelse(anom_2mo_sos == 1 & Sos2moSlope < 0, "-",
+                          ifelse(anom_2mo_sos == 1 & Sos2moSlope > 0, "+", "o")))  
+
+ANOM_TABLE <- ANOM_finalstats %>% 
+  group_by(Type, site) %>%
+  summarise(gs = min(gs)) %>%
+  inner_join(ANOM_finalstats) %>%
+  select(Type, site, sig) %>%
+  pivot_wider(names_from = Type, values_from = sig) %>%
+  full_join(ANOM_finalstats %>%
+              group_by(Type, site) %>%
+              summarise(gs = min(gs)) %>%
+              inner_join(ANOM_finalstats) %>%
+              select(Type, site, Slope) %>%
+              pivot_wider(names_from = Type, values_from = Slope) %>%
+              rename(gslChange_max5motemp_Slope = gslChange_max5motemp, 
+                     sosChange_sos2motemp_Slope = sosChange_sos2motemp,
+                     maxNDVIChange_max5motemp_Slope = maxNDVIChange_max5motemp,
+                     gsl_maxNDVI_Slope = gsl_maxNDVI))
+
+SUMMARY_TABLE <- full_join(PHENO_TABLE, CLIM_TABLE) %>%
+  full_join(ANOM_TABLE) %>%
+  full_join(SiteInfo) %>%
+  inner_join(sites_nutnet)
+
+
+Anova(lmer(ChangeSOS ~ anom_2mo_sos + (1|site), data = filter(ANOM_finalstats, Type =="sosChange_sos2motemp") ))
+SUMMARY_TABLE %>% 
+  group_by(sosChange_sos2motemp) %>%
+  summarise(N = n())
+SUMMARY_TABLE %>% filter(sosChange_sos2motemp =="+")
+fig_gutemp_gudate <- ANOM_finalstats %>% filter(Type =="sosChange_sos2motemp") %>%
+  ggplot(aes(x = anom_2mo_sos, y = ChangeSOS, col = site)) +
+  geom_point(pch = 21, col = "grey60")+
+  guides(col = F)+
+  geom_smooth(method = 'lm', data = filter(ANOM_finalstats, Type =="sosChange_sos2motemp",  sig!="o"), fill = NA, lty = 2, lwd = .5) +
+  theme_cowplot() +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60")+
+  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
+    scale_color_manual(values = rep(c(1), 68))+
+  labs(x = "Green-up temp anamoly (°C)", y = "Change in green-up date (days)")
+
+
+
+Anova(lmer(ChangeGSL ~ anom_5mo_max + (1|site), data = filter(ANOM_finalstats, Type =="maxNDVIChange_max5motemp") ))
+
+fig_gstemp_gsl <- ANOM_finalstats %>% filter(Type =="maxNDVIChange_max5motemp") %>%
+  ggplot(aes(x = anom_5mo_max, y = ChangeGSL, col = site)) +
+  geom_point(pch = 21, col = "grey60")+
+  guides(col = F)+
+  geom_smooth(method = 'lm', data = filter(ANOM_finalstats, Type =="maxNDVIChange_max5motemp",  sig!="o"), fill = NA, lty = 2, lwd = .5) +
+  theme_cowplot() +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60")+
+  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
+    scale_color_manual(values = rep(c(1), 68))+
+  labs(x = "Growing season temp anamoly (°C)", y = "Change in growing season length")
+
+
+phenoENV <- plot_grid(fig_gutemp_gudate, fig_gstemp_gsl, labels = "AUTO")
+ggsave("./phenoENV.pdf", phenoENV,dpi=600,width=9,height=4,units='in')
+
+
+```
+
+- Plot trends on the globe
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+#####
+# Growing Season Length
+#####
+
+gg_gsl_world <-( ggplot(data = world, label = site)+
+  geom_sf(fill = NA, lwd = .2) +
+  geom_point(data = filter(SUMMARY_TABLE, gslDAYS == "o"), aes (x = long, y = lat, col = gslDAYS), pch = 21) +
+  geom_point(data = filter(SUMMARY_TABLE, gslDAYS != "o"), aes (x = long, y = lat, col = gslDAYS), pch = 21) +
+  theme_bw()+
+  labs(title = "Change in Growing Season Length") +
+    scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "black"), name = "Direction of change:", 
+                       labels = c("-" = "shorter (-)", "+" = "longer (+)", "o" = "no change (o)")) +
+    theme(legend.position= (c(.1, .2)),
+          legend.background = element_rect(linetype = 1, colour = 1)))
+
+gg_gsl_mat <- SUMMARY_TABLE %>%
+  ggplot(aes(y = TempMAT, x = gslDAYS, col = gslDAYS)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +
+  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+
+gg_gsl_elevation <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Elevation, x = gslDAYS, col = gslDAYS)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +
+  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_gsl_richness <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Richness, x = gslDAYS, col = gslDAYS)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +
+  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_gsl_ndep <- SUMMARY_TABLE %>%
+  ggplot(aes(y = N.deposition1993, x = gslDAYS, col = gslDAYS)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +
+  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_gsl_tempgslwindow <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Max5moSlope, x = gslDAYS, col = gslDAYS)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+    labs(y = "Slope of 5 month grow.seas. window") +
+  geom_hline(yintercept = 0, lty = 2)+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +
+  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_gsl_even <- SUMMARY_TABLE %>%
+  ggplot(aes(y = ObsYrMeanEven, x = gslDAYS, col = gslDAYS)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+    labs(y = "Mean Eveness in Obs. Yr.") +
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +
+  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+GSLPLOT <- grid.arrange(gg_gsl_world,
+                            gg_gsl_mat, gg_gsl_elevation, gg_gsl_richness, 
+                            gg_gsl_tempgslwindow, gg_gsl_ndep, gg_gsl_even,
+             ncol = 2, nrow = 4, layout_matrix = cbind(c(1, 2, 3, 4), c(1, 5, 6, 7)), 
+             widths = c(1, 1), heights = c(1, .25, .25, .25))
+
+ggsave("./GSL_world_plot.pdf", GSLPLOT,dpi=600,width=8,height=10,units='in')
+
+SUMMARY_TABLE %>% group_by(gslDAYS) %>% summarise(N = n())
+
+Anova(lm(TempMAT ~ gslDAYS, data = SUMMARY_TABLE))
+Anova(lm(Max5moSlope ~ gslDAYS, data = SUMMARY_TABLE))
+Anova(lm(Elevation ~ gslDAYS, data = SUMMARY_TABLE))
+Anova(lm(N.deposition1993 ~ gslDAYS, data = SUMMARY_TABLE)) ##sig
+Anova(lm(Richness ~ gslDAYS, data = SUMMARY_TABLE))
+Anova(lm(ObsYrMeanEven ~ gslDAYS, data = SUMMARY_TABLE)) #ms
+
+```
+
+
+
+```{r}
+
+#####
+# SOS Date
+#####
+gg_sos_world <-( ggplot(data = world, label = site)+
+  geom_sf(fill = NA, lwd = .2) +
+  geom_point(data = filter(SUMMARY_TABLE, sosDATE == "o"), aes (x = long, y = lat, col = sosDATE), pch = 21) +
+  geom_point(data = filter(SUMMARY_TABLE, sosDATE != "o"), aes (x = long, y = lat, col = sosDATE), pch = 21) +
+  theme_bw()+
+    labs(title = "Change in Green-up Date") +
+    scale_color_manual(values = c("+" = "brown2", "-" = "green2", "o" = "black"), name = "Direction of change:", 
+                       labels = c("-" = "earlier (-)", "+" = "later (+)", "o" = "no change (o)")) +
+    theme(legend.position= (c(.1, .2)),
+          legend.background = element_rect(linetype = 1, colour = 1)))
+
+Anova(lm(sosSlope ~ TempMAT + Elevation + Richness + N.deposition1993 + Sos2moSlope, data = SUMMARY_TABLE))
+
+gg_sos_mat <- SUMMARY_TABLE %>%
+  ggplot(aes(y = TempMAT, x = sosDATE, col = sosDATE)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  
+  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("+" = "brown2", "-" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_sos_elevation <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Elevation, x = sosDATE, col = sosDATE)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +
+  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("+" = "brown2", "-" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_sos_richness <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Richness, x = sosDATE, col = sosDATE)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("+" = "brown2", "-" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_sos_ndep <- SUMMARY_TABLE %>%
+  ggplot(aes(y = N.deposition1993, x = sosDATE, col = sosDATE)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("+" = "brown2", "-" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_sos_tempguwindow <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Sos2moSlope, x = sosDATE, col = sosDATE)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  labs(y = "Slope of 2 month green-up window") +
+  geom_hline(yintercept = 0, lty = 2)+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  guides(col = F) +
+  coord_flip() +
+    scale_color_manual(values = c("+" = "brown2", "-" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+
+gg_sos_even <- SUMMARY_TABLE %>%
+  ggplot(aes(y = ObsYrMeanEven, x = sosDATE, col = sosDATE)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  labs(y = "Avg. evenness, year 0") +
+  geom_hline(yintercept = 0, lty = 2)+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("+" = "brown2", "-" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+
+SOSPLOT <- grid.arrange(gg_sos_world,
+                            gg_sos_mat, gg_sos_elevation, gg_sos_richness, 
+                            gg_sos_tempguwindow, gg_sos_ndep, gg_sos_even,
+             ncol = 2, nrow = 4, layout_matrix = cbind(c(1, 2, 3, 4), c(1, 5, 6, 7)), 
+             widths = c(1, 1), heights = c(1, .25, .25, .25))
+
+ggsave("./SOS_world_plot.pdf", SOSPLOT,dpi=600,width=8,height=10,units='in')
+
+SUMMARY_TABLE %>% group_by(sosDATE) %>% summarise(N = n())
+
+Anova(lm(TempMAT ~ sosDATE, data = SUMMARY_TABLE))
+Anova(lm(Max5moSlope ~ sosDATE, data = SUMMARY_TABLE))
+Anova(lm(Elevation ~ sosDATE, data = SUMMARY_TABLE))
+Anova(lm(N.deposition1993 ~ sosDATE, data = SUMMARY_TABLE)) 
+Anova(lm(Richness ~ sosDATE, data = SUMMARY_TABLE))
+Anova(lm(ObsYrMeanEven ~ sosDATE, data = SUMMARY_TABLE)) 
+
+```
+
+
+
+```{r}
+#####
+# Max NDVI Value
+#####
+gg_maxndvi_world <-( ggplot(data = world, label = site)+
+  geom_sf(fill = NA, lwd = .2) +
+  geom_point(data = filter(SUMMARY_TABLE, maxNDVI == "o"), aes (x = long, y = lat, col = maxNDVI), pch = 21) +
+  geom_point(data = filter(SUMMARY_TABLE, maxNDVI != "o"), aes (x = long, y = lat, col = maxNDVI), pch = 21) +
+  theme_bw()+
+  labs(title = "Maximum NDVI trends") +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "black"), name = "Direction of change:", 
+                     labels = c("-" = "browning (-)", "+" = "greening (+)", "o" = "no change (o)")) +
+  theme(legend.position= (c(.1, .2)),
+        legend.background = element_rect(linetype = 1, colour = 1)))
+
+
+gg_maxndvi_mat <- SUMMARY_TABLE %>%
+  ggplot(aes(y = TempMAT, x = maxNDVI, col = maxNDVI)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  
+  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_maxndvi_elevation <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Elevation, x = maxNDVI, col = maxNDVI)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +
+  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_maxndvi_richness <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Richness, x = maxNDVI, col = maxNDVI)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_maxndvi_ndep <- SUMMARY_TABLE %>%
+  ggplot(aes(y = N.deposition1993, x = maxNDVI, col = maxNDVI)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_maxndvi_tempguwindow <- SUMMARY_TABLE %>%
+  ggplot(aes(y = Max5moSlope, x = maxNDVI, col = maxNDVI)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  labs(y = "Slope of growing season temp (5 mo. window)") +
+  geom_hline(yintercept = 0, lty = 2)+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+gg_maxndvi_even <- SUMMARY_TABLE %>%
+  ggplot(aes(y = ObsYrMeanEven, x = maxNDVI, col = maxNDVI)) +
+  stat_boxplot(fill = NA, col = "black") +
+  geom_jitter(width = .2, height = 0, pch = 21) +
+  theme_cowplot()+
+  labs(y = "Avg. evenness, year 0") +
+  geom_hline(yintercept = 0, lty = 2)+
+  theme(axis.title.y = element_blank(), 
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 9)) +  guides(col = F) +
+  coord_flip() +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "grey40"), name = "Direction\nof change")
+
+
+MAXNDVIPLOT <- grid.arrange(gg_maxndvi_world,
+                            gg_maxndvi_mat, gg_maxndvi_elevation, gg_maxndvi_richness, 
+                            gg_maxndvi_tempguwindow, gg_maxndvi_ndep, gg_maxndvi_even,
+             ncol = 2, nrow = 4, layout_matrix = cbind(c(1, 2, 3, 4), c(1, 5, 6, 7)), 
+             widths = c(1, 1), heights = c(1, .25, .25, .25))
+
+ggsave("./MAXNDVI_world_plot.pdf", MAXNDVIPLOT,dpi=600,width=8,height=10,units='in')
+
+SUMMARY_TABLE %>% group_by(maxNDVI) %>% summarise(N = n())
+SUMMARY_TABLE %>% filter(maxNDVI == "-")
+
+Anova(lmer(Change_ndvi_max ~ gs + (1|site), data = ANDREWALL))
+
+fig_ndvi_changes_over_time <- (ANDREWALL %>%
+  ggplot(aes(y = Change_ndvi_max, x = gs, col = site)) +
+  geom_point(pch = 21, col = "grey60")+
+  guides(col = F)+
+   # geom_smooth(method = 'lm', col = "green") +
+  geom_smooth(method = "lm", data = filter(ANDREWALL, site %in% SUMMARY_TABLE$site[SUMMARY_TABLE$maxNDVI!="o"]), fill = NA, lty = 2, lwd = .5)+
+  theme_cowplot() +
+  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
+    scale_color_manual(values = rep(c(1), 45))+
+    labs ( x = "Growing season (year)",
+  y = "Change in maximum NDVI"))
+fig_ndvi_changes_over_time
+ggsave("./fig_ndvi_changes_over_time.pdf", fig_ndvi_changes_over_time,dpi=600,width=4,height=4,units='in')
+
+
+#cor.test(SUMMARY_TABLE$maxndviSlope, SUMMARY_TABLE$Max5moSlope, method = "pearson")
+Anova(lm(TempMAT ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(Max5moSlope ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(Elevation ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(N.deposition1993 ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(Richness ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(ObsYrMeanEven ~ maxNDVI, data = SUMMARY_TABLE))
+
+
+
+fig_ndvi_changes_with_gsl <- ANDREWALL %>% 
+  ggplot(aes(y = Change_ndvi_max, x = ChangeGSL, col = site)) +
+  geom_point(pch = 21, col = "grey60")+
+  guides(col = F)+
+  geom_smooth(method = "lm", data = filter(ANDREWALL, site %in% SUMMARY_TABLE$site[SUMMARY_TABLE$gsl_maxNDVI!="o"]), fill = NA, lty = 2, lwd = .5)+
+  # geom_smooth(method = 'lm', data = filter(ANOM_finalstats, Type =="gsl_maxNDVI",  sig!="o"), fill = NA, lty = 2, lwd = .5) +
+  # geom_smooth(method = "lm", data = filter(ANOM_finalstats, sig !="o"), col = "black", fill = NA)+
+  theme_cowplot() +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60")+
+  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
+    scale_color_manual(values = rep(c(1), 68)) +
+  labs(x = "Change in growing season length (days)",
+       y = "Change in maximum NDVI")
+ggsave("./fig_ndvi_changes_over_time.pdf", fig_ndvi_changes_over_time,dpi=600,width=4,height=4,units='in')
+
+SUMMARY_TABLE %>% 
+  group_by(gsl_maxNDVI) %>%
+  summarise(N = n())
+cor.test(ANDREWALL$Change_ndvi_max, ANDREWALL$ChangeGSL)
+
+NDVITIME <- plot_grid(fig_ndvi_changes_over_time, fig_ndvi_changes_with_gsl, labels = "AUTO")
+ggsave("./NDVITIME.pdf", NDVITIME,dpi=600,width=9,height=4,units='in')
+
+```
+
+
+```{r}
+#####
+# GSL + TEMP
+#####
+SUMMARY_TABLE %>%
+  ggplot(aes(y = gslSlope, x = Max5moSlope)) +
+  geom_point(aes(col = gslDAYS))+
+  theme_cowplot()+
+  geom_smooth(method = "lm", fill = NA, col = "black", lty = 2) +
+  labs(x = "Slope of (temp anomaly thru time)\nduring 5 month growing season window",
+       y = "Slope of (growing season length thru time)") +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "black"), name = "Growing\nseason\nlength\nchange:", 
+                     labels = c("-" = "shorter (-)", "+" = "longer (+)", "o" = "no change (o)")) #+
+
+Anova(lm(gslSlope ~ Max5moSlope * gslDAYS , data = SUMMARY_TABLE))
+TukeyHSD(aov(gslSlope ~ gslDAYS, data = SUMMARY_TABLE))
+
+
+###
+# SOS + TEMP
+####
+SUMMARY_TABLE %>%
+  ggplot(aes(y = sosSlope, x = Sos2moSlope)) +
+  geom_point(aes(col = gslDAYS))+
+  theme_cowplot()+
+  geom_smooth(method = "lm", fill = NA, col = "black", lty = 2) +
+  labs(x = "Slope of (temp anomaly thru time)\nduring 2 months green-up window",
+       y = "Slope of (green-up datethru time)") +
+  scale_color_manual(values = c("-" = "brown2", "+" = "green2", "o" = "black"), name = "Green-up\ndate\nchange:", 
+                     labels = c("-" = "later (-)", "+" = "earlier (+)", "o" = "no change (o)")) #+
+Anova(lm(sosSlope ~ Sos2moSlope * gslDAYS , data = SUMMARY_TABLE))
+
+SUMMARY_TABLE %>%
+  select(site, gslDAYS, sosDATE) %>%
+  # mutate(gslDAYS = dplyr::recode(gslDAYS,  "o" = "NA"),
+  #        sosDATE = dplyr::recode(sosDATE, "o" = "NA")) %>%
+  rename(`Changed growing season length` = gslDAYS,
+         `Shifted green-up date` = sosDATE) 
+
+```
+
+
+
+
+
+- plot splines at each site, if you want to
+
+```{r plottinng, eval = T, echo = F, message = F, warning = F}
+# (ggplot(data=(ANDREWALL), aes(x=gs, y=MAXndvi, col=site))+theme_cowplot()+
+#   geom_smooth(method='lm', fill=NA)+guides(col=F)+
+#   geom_smooth(method='lm', col='black'))
+
+test = "elliot"
+#plot of various locations
+allfittedndvi %>% 
+  filter(site == test) %>% 
+  ggplot(aes(x = Date, y = ndvi)) +
+  geom_point(size = .1) +
+  geom_point(data = filter(pheno_data_all, site == test), aes(y = NDVI), pch = 21) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), panel.grid.major.x = element_line(colour = 'grey')) +
+  geom_point(data = filter(NutNetPheno_long, site == test), aes(col = Type), size = 2) +
+  theme_cowplot()+
+  labs(title = test) 
+#ggsave("./abiskoPHENO-DATA-ALL-5ptsgs-spar.3- 30buffer.pdf", PLOT,dpi=600,width=24,height=4,units='in')
+
+```
+
+
+* It could also be interesting to ask if there's anything about species richness/eveness/soil characteristics/ndeposition/etc changing phenodates
