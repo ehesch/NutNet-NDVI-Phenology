@@ -97,7 +97,7 @@ setnames(NutNet.dat.long, 3, gsub(' ', '_', paste0(
   cruv, '_', ncatt_get(nc, cruv, 'units')$value
 )))
 NutNet.dat.long[, plotdate := mdy(date)]
-NutNet.dat.long[, month := month(plotdate)]
+NutNet.dat.long[, month := month(plotdate, abbr = F, label = F)]
 NutNet.dat.long[, year := year(plotdate)]
 NutNet.dat.long
 
@@ -112,7 +112,7 @@ NutNet.dat.long
 # output the data
 write.csv(
   NutNet.dat.long,
-  paste0('./data/CRU/CRU-monthly-', cruv, timeframe, 'csv'),
+  paste0('./data/weather/CRU-monthly-', cruv, timeframe, 'csv'),
   row.names = F
 )
 

@@ -5,26 +5,50 @@ date: "1/18/2021"
 output: html_document
 ---
 
-
-# Processing data
-
-```{r}
+```{r packages, include=F}
 library("tidyverse")
-
+library("sf")
+library("rnaturalearth")
 ```
 
-## Process climate data
+# Overview
 
-1) Download [precipitation data](http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/pre) onto your local machine (large files). You will have to either create an account or log in. Download 4 time periods (you want the files with the 'nc' in the name):
+This document walks through the steps necessary to:
+-
+-
+
+
+As an FYI, the code chunks here are set to `eval = FALSE` becuase they often rely on data stored locally. Stepping through the code should still allow you to perform all steps of this analysis. 
+
+You'll need to read in the location of the sites being used in this analysis.
+You'll also need to store some files on your local machine, so set a path to your desired location.
+
+```{r filelocations}
+sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv')
+localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/pheno_localdata"
+```
+
+And just for fun, here is a map of the sites in this analysis
+
+```{r sitemap, echo=F}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+(ggplot(data = world, label = site)+
+  geom_sf() +
+  geom_point(data = sites, aes (x = longitude, y = latitude), col = "orange2") +
+  theme_bw()+
+  labs(title = "111 sites in analysis here"))
+```
+
+## Process weather & climate data
+
+1) Download montly [precipitation data](http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/pre) onto your local machine (large files). You will have to either create an account or log in. Download 4 time periods (you want the files with the 'nc' in the name):
+
 - 1981-1990
 - 1991-2000
 - 2001-2010
 - 2011-2019
 
-```{r setup, include=FALSE}
-sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv')
-localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/CRU"
-  
+```{r precipdata, include=FALSE, eval=F}
 ### create precipitation data for the 4 distinct time periods
 cruv <- "pre"
 timeframe <- '1981.1990.'
@@ -41,12 +65,10 @@ source("./get-CRU-TS.R")
 ```
 
 
-2) Download [temperature data](http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/tmp) onto your local machine (large files). You will have to either create an account or log in. Download 4 time periods (you want the files with the 'nc' in the name):
-- 1981-1990
-- 1991-2000
-- 2001-2010
-- 2011-2019
-```{r temperaturedata, include = F}
+2) Repeat with montly [temperature data](http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/tmp).
+
+
+```{r temperaturedata, include = F, eval = F}
 cruv <- 'tmp'
 timeframe <- '1981.1990.'
 source("./get-CRU-TS.R")
@@ -61,3 +83,232 @@ timeframe <- '2011.2019.'
 source("./get-CRU-TS.R")
 ```
 
+3) Create a `climate` dataframe with merged monthly temperature and precipitation data
+
+```{r climatedf, echo=F}
+eightys <- read_csv("./data/CRU/CRU-monthly-tmp1981.1990.csv", col_types = cols()) %>% 
+  full_join(read_csv("./data/CRU/CRU-monthly-pre1981.1990.csv", col_types = cols())) %>%
+  dplyr::select(-date, -month, -year)
+
+ninetys <- read_csv("./data/CRU/CRU-monthly-tmp1991.2000.csv", col_types = cols()) %>% 
+  full_join(read_csv("./data/CRU/CRU-monthly-pre1991.2000.csv", col_types = cols())) %>%
+  dplyr::select(-date, -month, -year)
+
+thousands <- read_csv("./data/CRU/CRU-monthly-tmp2001.2010.csv", col_types = cols()) %>% 
+  full_join(read_csv("./data/CRU/CRU-monthly-pre2001.2010.csv", col_types = cols())) %>%
+  dplyr::select(-date, -month, -year)
+
+tens <- read_csv("./data/CRU/CRU-monthly-tmp2011.2019.csv", col_types = cols()) %>% 
+  full_join(read_csv("./data/CRU/CRU-monthly-pre2011.2019.csv", col_types = cols())) %>%
+  dplyr::select(-date, -month, -year)
+
+climate <- bind_rows(eightys, ninetys, thousands, tens) %>%
+  rename(sitename = site_code)
+```
+
+4) Download [30 year averages from WorldClim](https://www.worldclim.org/data/worldclim21.html) onto your local machine. Download the most detailed spatial level (30 seconds) for:
+
+- average temperature (tavg_30s)
+- precipitaiton (preci_30s)
+
+```{r}
+#for some of the analyses need to change the spatial form
+sites2 <- sites %>%
+  dplyr::select(site_code, "GEE coordinates") %>%
+  separate("GEE coordinates", sep = ',', into = c('long', 'lat')) %>%
+  filter(!is.na(long)) %>%
+  mutate(lat = as.numeric(lat), long = as.numeric(long)) 
+coordinates(sites2) <- ~long + lat
+
+sites_nutnet_sp2<- sites2 %>% st_as_sf()
+
+#####
+# temperature
+#####
+
+WC1 <- raster(paste0(localdir, '/wc2.1_30s_tavg_01.tif'))
+wc1 <- raster::extract(WC1, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC2 <- raster(paste0(localdir, '/wc2.1_30s_tavg_02.tif'))
+wc2 <- raster::extract(WC2, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC3 <- raster(paste0(localdir, '/wc2.1_30s_tavg_03.tif'))
+wc3 <- raster::extract(WC3, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC4 <- raster(paste0(localdir, '/wc2.1_30s_tavg_04.tif'))
+wc4 <- raster::extract(WC4, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC5 <- raster(paste0(localdir, '/wc2.1_30s_tavg_05.tif'))
+wc5 <- raster::extract(WC5, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC6 <- raster(paste0(localdir, '/wc2.1_30s_tavg_06.tif'))
+wc6 <- raster::extract(WC6, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC7 <- raster(paste0(localdir, '/wc2.1_30s_tavg_07.tif'))
+wc7 <- raster::extract(WC7, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC8 <- raster(paste0(localdir, '/wc2.1_30s_tavg_08.tif'))
+wc8 <- raster::extract(WC8, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC9 <- raster(paste0(localdir, '/wc2.1_30s_tavg_09.tif'))
+wc9 <- raster::extract(WC9, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC10 <- raster(paste0(localdir, '/wc2.1_30s_tavg_10.tif'))
+wc10 <- raster::extract(WC10, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC11 <- raster(paste0(localdir, '/wc2.1_30s_tavg_11.tif'))
+wc11 <- raster::extract(WC11, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+WC12 <- raster(paste0(localdir, '/wc2.1_30s_tavg_12.tif'))
+wc12 <- raster::extract(WC12, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+
+AvgClimate <- full_join(wc1, wc2, by = c("ID", "sitename")) %>%
+  full_join(wc3, by = c("ID", "sitename")) %>%
+  full_join(wc4, by = c("ID", "sitename")) %>%
+  full_join(wc5, by = c("ID", "sitename")) %>%
+  full_join(wc6, by = c("ID", "sitename")) %>%
+  full_join(wc7, by = c("ID", "sitename")) %>%
+  full_join(wc8, by = c("ID", "sitename")) %>%
+  full_join(wc9, by = c("ID", "sitename")) %>%
+  full_join(wc10, by = c("ID", "sitename")) %>%
+  full_join(wc11, by = c("ID", "sitename")) %>%
+  full_join(wc12, by = c("ID", "sitename"))  %>%
+  gather(Month, AvgTempLTA, -ID, -sitename) %>%
+  mutate(Month = recode(Month, "wc2.1_30s_tavg_01" = 1,
+                        "wc2.1_30s_tavg_02" = 2, 
+                        "wc2.1_30s_tavg_03" = 3,
+                        "wc2.1_30s_tavg_04" = 4, 
+                        "wc2.1_30s_tavg_05" = 5,
+                        "wc2.1_30s_tavg_06" = 6,
+                        "wc2.1_30s_tavg_07" = 7, 
+                        "wc2.1_30s_tavg_08" = 8, 
+                        "wc2.1_30s_tavg_09" = 9,
+                        "wc2.1_30s_tavg_10" = 10,
+                        "wc2.1_30s_tavg_11" = 11,
+                        "wc2.1_30s_tavg_12" = 12)) 
+
+
+####
+#precip
+#####
+
+preWC1 <- raster(paste0(localdir, '/wc2.1_30s_prec_01.tif'))
+prewc1 <- raster::extract(preWC1, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC2 <- raster(paste0(localdir, '/wc2.1_30s_prec_02.tif'))
+prewc2 <- raster::extract(preWC2, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC3 <- raster(paste0(localdir, '/wc2.1_30s_prec_03.tif'))
+prewc3 <- raster::extract(preWC3, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC4 <- raster(paste0(localdir, '/wc2.1_30s_prec_04.tif'))
+prewc4 <- raster::extract(preWC4, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC5 <- raster(paste0(localdir, '/wc2.1_30s_prec_05.tif'))
+prewc5 <- raster::extract(preWC5, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC6 <- raster(paste0(localdir, '/wc2.1_30s_prec_06.tif'))
+prewc6 <- raster::extract(preWC6, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC7 <- raster(paste0(localdir, '/wc2.1_30s_prec_07.tif'))
+prewc7 <- raster::extract(preWC7, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC8 <- raster(paste0(localdir, '/wc2.1_30s_prec_08.tif'))
+prewc8 <- raster::extract(preWC8, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC9 <- raster(paste0(localdir, '/wc2.1_30s_prec_09.tif'))
+prewc9 <- raster::extract(preWC9, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC10 <- raster(paste0(localdir, '/wc2.1_30s_prec_10.tif'))
+prewc10 <- raster::extract(preWC10, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC11 <- raster(paste0(localdir, '/wc2.1_30s_prec_11.tif'))
+prewc11 <- raster::extract(preWC11, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+preWC12 <- raster(paste0(localdir, '/wc2.1_30s_prec_12.tif'))
+prewc12 <- raster::extract(preWC12, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code)
+
+
+AvgClimatePrecip <- full_join(prewc1, prewc2, by = c("ID", "sitename")) %>%
+  full_join(prewc3, by = c("ID", "sitename")) %>%
+  full_join(prewc4, by = c("ID", "sitename")) %>%
+  full_join(prewc5, by = c("ID", "sitename")) %>%
+  full_join(prewc6, by = c("ID", "sitename")) %>%
+  full_join(prewc7, by = c("ID", "sitename")) %>%
+  full_join(prewc8, by = c("ID", "sitename")) %>%
+  full_join(prewc9, by = c("ID", "sitename")) %>%
+  full_join(prewc10, by = c("ID", "sitename")) %>%
+  full_join(prewc11, by = c("ID", "sitename")) %>%
+  full_join(prewc12, by = c("ID", "sitename"))  %>%
+  gather(Month, AvgPrecipLTA, -ID, -sitename) %>%
+  mutate(Month = recode(Month, "wc2.1_30s_prec_01" = 1,
+                        "wc2.1_30s_prec_02" = 2, 
+                        "wc2.1_30s_prec_03" = 3,
+                        "wc2.1_30s_prec_04" = 4, 
+                        "wc2.1_30s_prec_05" = 5,
+                        "wc2.1_30s_prec_06" = 6,
+                        "wc2.1_30s_prec_07" = 7, 
+                        "wc2.1_30s_prec_08" = 8, 
+                        "wc2.1_30s_prec_09" = 9,
+                        "wc2.1_30s_prec_10" = 10,
+                        "wc2.1_30s_prec_11" = 11,
+                        "wc2.1_30s_prec_12" = 12)) 
+
+
+longterm_climate <- full_join(AvgClimate, AvgClimatePrecip)
+
+write.csv(
+  longterm_climate,
+  './data/weather/longterm_avgclimate.csv',
+  row.names = F
+)
+
+```
+
+5) Look at the monthly deviations from the long term average
+```{r weatherdev, echo=F}
+
+```
+
+
+## Nitrogen deposition data
+
+Download data onto local machine
+
+```{r ndep}
+ndep <- raster(paste0(localdir, '/N-deposition1993.tif'))
+
+ndep_merge <- raster::extract(ndep, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+  mutate(sitename = sites_nutnet_sp2$site_code) %>%
+  separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
+  dplyr::select(-b, -ID)
+
+summary(ndep_merge)
+# plot(ndep, main = "N Deposition modeled for 1993")
+
+```
