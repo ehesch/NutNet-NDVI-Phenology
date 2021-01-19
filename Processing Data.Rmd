@@ -1,14 +1,24 @@
 ---
-title: "Untitled"
-author: "Ellen"
-date: "1/18/2021"
-output: html_document
+title: "NutNet Phenology with NDVI"
+author: "Ellen Esch"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+# output:
+#   word_document: default
+#   pdf_document: default
+#   html_document: default
+output: 
+  github_document:
+    toc: true
+urlcolor: blue
 ---
 
-```{r packages, include=F}
+```{r packages, include=F, echo=F, message=F}
 library("tidyverse")
 library("sf")
 library("rnaturalearth")
+library("cowplot")
+library("lubridate")
+library("raster")
 ```
 
 # Overview
@@ -18,14 +28,28 @@ This document walks through the steps necessary to:
 -
 
 
-As an FYI, the code chunks here are set to `eval = FALSE` becuase they often rely on data stored locally. Stepping through the code should still allow you to perform all steps of this analysis. 
+Please change `process_raw` equal to `TRUE` if you need to download and process raw data. In most cases, this will likely remain as `FALSE`, becuase intermediate (processed) files *are* stored on GitHub. 
 
 You'll need to read in the location of the sites being used in this analysis.
 You'll also need to store some files on your local machine, so set a path to your desired location.
 
-```{r filelocations}
-sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv')
+```{r filelocations, }
+sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv', col_types = cols())
 localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/pheno_localdata"
+
+process_raw <- FALSE #TRUE
+```
+
+```{r moresetup, echo=F, include = F}
+#for some of the analyses need to change the spatial form
+sites2 <- sites %>%
+  dplyr::select(site_code, "GEE coordinates") %>%
+  separate("GEE coordinates", sep = ',', into = c('long', 'lat')) %>%
+  filter(!is.na(long)) %>%
+  mutate(lat = as.numeric(lat), long = as.numeric(long)) 
+coordinates(sites2) <- ~long + lat
+
+sites_nutnet_sp2<- sites2 %>% st_as_sf()
 ```
 
 And just for fun, here is a map of the sites in this analysis
@@ -41,6 +65,8 @@ world <- ne_countries(scale = "medium", returnclass = "sf")
 
 ## Process weather & climate data
 
+**Skip to step 5 if not needing to re-create data. Steps 1-4 walk through raw data downloads.**
+
 1) Download montly [precipitation data](http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/pre) onto your local machine (large files). You will have to either create an account or log in. Download 4 time periods (you want the files with the 'nc' in the name):
 
 - 1981-1990
@@ -48,8 +74,9 @@ world <- ne_countries(scale = "medium", returnclass = "sf")
 - 2001-2010
 - 2011-2019
 
-```{r precipdata, include=FALSE, eval=F}
+```{r precipdata, echo=F}
 ### create precipitation data for the 4 distinct time periods
+if (process_raw == TRUE) {
 cruv <- "pre"
 timeframe <- '1981.1990.'
 source("./get-CRU-TS.R")
@@ -62,13 +89,16 @@ source("./get-CRU-TS.R")
 
 timeframe <- '2011.2019.'
 source("./get-CRU-TS.R")
+
+} else print("not processing raw data")
 ```
 
 
 2) Repeat with montly [temperature data](http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/tmp).
 
 
-```{r temperaturedata, include = F, eval = F}
+```{r temperaturedata, echo = F}
+if (process_raw == TRUE) {
 cruv <- 'tmp'
 timeframe <- '1981.1990.'
 source("./get-CRU-TS.R")
@@ -81,29 +111,41 @@ source("./get-CRU-TS.R")
 
 timeframe <- '2011.2019.'
 source("./get-CRU-TS.R")
+} else print("not processing raw data")
+
 ```
 
-3) Create a `climate` dataframe with merged monthly temperature and precipitation data
+3) Write a dataframe with merged monthly temperature and precipitation data
 
 ```{r climatedf, echo=F}
-eightys <- read_csv("./data/CRU/CRU-monthly-tmp1981.1990.csv", col_types = cols()) %>% 
-  full_join(read_csv("./data/CRU/CRU-monthly-pre1981.1990.csv", col_types = cols())) %>%
+if (process_raw == TRUE) {
+eightys <- read_csv("./data/weather/CRU-monthly-tmp1981.1990.csv", col_types = cols()) %>% 
+  full_join(read_csv("./data/weather/CRU-monthly-pre1981.1990.csv", col_types = cols())) %>%
   dplyr::select(-date, -month, -year)
 
-ninetys <- read_csv("./data/CRU/CRU-monthly-tmp1991.2000.csv", col_types = cols()) %>% 
-  full_join(read_csv("./data/CRU/CRU-monthly-pre1991.2000.csv", col_types = cols())) %>%
+ninetys <- read_csv("./data/weather/CRU-monthly-tmp1991.2000.csv", col_types = cols()) %>% 
+  full_join(read_csv("./data/weather/CRU-monthly-pre1991.2000.csv", col_types = cols())) %>%
   dplyr::select(-date, -month, -year)
 
-thousands <- read_csv("./data/CRU/CRU-monthly-tmp2001.2010.csv", col_types = cols()) %>% 
-  full_join(read_csv("./data/CRU/CRU-monthly-pre2001.2010.csv", col_types = cols())) %>%
+thousands <- read_csv("./data/weather/CRU-monthly-tmp2001.2010.csv", col_types = cols()) %>% 
+  full_join(read_csv("./data/weather/CRU-monthly-pre2001.2010.csv", col_types = cols())) %>%
   dplyr::select(-date, -month, -year)
 
-tens <- read_csv("./data/CRU/CRU-monthly-tmp2011.2019.csv", col_types = cols()) %>% 
-  full_join(read_csv("./data/CRU/CRU-monthly-pre2011.2019.csv", col_types = cols())) %>%
+tens <- read_csv("./data/weather/CRU-monthly-tmp2011.2019.csv", col_types = cols()) %>% 
+  full_join(read_csv("./data/weather/CRU-monthly-pre2011.2019.csv", col_types = cols())) %>%
   dplyr::select(-date, -month, -year)
 
-climate <- bind_rows(eightys, ninetys, thousands, tens) %>%
-  rename(sitename = site_code)
+monthlyweather <- bind_rows(eightys, ninetys, thousands, tens) %>%
+  rename(sitename = site_code) %>% 
+  mutate(Month = month(plotdate)) 
+
+write.csv(
+  monthlyweather,
+  './data/weather/monthlyweather.csv',
+  row.names = F
+)
+} else print("not processing raw data")
+
 ```
 
 4) Download [30 year averages from WorldClim](https://www.worldclim.org/data/worldclim21.html) onto your local machine. Download the most detailed spatial level (30 seconds) for:
@@ -111,16 +153,8 @@ climate <- bind_rows(eightys, ninetys, thousands, tens) %>%
 - average temperature (tavg_30s)
 - precipitaiton (preci_30s)
 
-```{r}
-#for some of the analyses need to change the spatial form
-sites2 <- sites %>%
-  dplyr::select(site_code, "GEE coordinates") %>%
-  separate("GEE coordinates", sep = ',', into = c('long', 'lat')) %>%
-  filter(!is.na(long)) %>%
-  mutate(lat = as.numeric(lat), long = as.numeric(long)) 
-coordinates(sites2) <- ~long + lat
-
-sites_nutnet_sp2<- sites2 %>% st_as_sf()
+```{r worldclim, echo=F}
+if (process_raw == TRUE) {
 
 #####
 # temperature
@@ -288,13 +322,95 @@ write.csv(
   row.names = F
 )
 
-```
+} else print("not processing raw data")
 
-5) Look at the monthly deviations from the long term average
-```{r weatherdev, echo=F}
 
 ```
 
+5) Look at the monthly deviations from the long term average. 
+
+A plot illustrate a problem here (with an easy solution). At Cowichan there are no consistent longitudinal trends, but it is obvious that worldclim (long term average) and ceda (montly) data don't always necessarily align (expected becuase they have differnt methods, resolutions, etc.). This suggests that ceda should be used to calculate averages (1981-2019, 39 years) as well as anomolies. 
+
+
+```{r weatherdev, echo=F, message=F, warning=F}
+worldclim <- read_csv("./data/weather/longterm_avgclimate.csv")
+montlycru <- read_csv("./data/weather/monthlyweather.csv")
+
+#ceda precip in mm/month
+#world clim is also in mm/month
+ClimChange_wc <- montlycru %>% 
+  full_join(worldclim) %>%
+  mutate(TempDifference = tmp_degrees_Celsius - AvgTempLTA) %>%
+  mutate(PrecipDifference = `pre_mm/month` - AvgPrecipLTA) %>%
+  separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
+  dplyr::select(-b)
+
+# ClimChange_wc %>% filter(site=="sval") %>%
+#   ggplot(aes(x=plotdate, y=TempDifference))+
+#   geom_point()+
+#   geom_smooth(method = "lm")+
+#   facet_wrap(~Month)+
+#   labs(y = "Anomaly from 1970-2000, celsius", x = "Year", title = "Temperature Anomalies, Svalbard")+
+#   theme_cowplot()+
+#   geom_hline(yintercept = 0)+
+#   scale_x_date(limits = c(ymd("1984-01-01"), ymd("2020-01-01")), date_breaks = "10 years", date_labels = "%Y") +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ClimChange_wc %>% filter(site=="cowi") %>%
+  ggplot(aes(x=plotdate, y=PrecipDifference))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month)+
+  labs(y = "Anomaly from 1970-2000, mm", x = "Year", title = "Precip Anomalies, Cowichan")+
+  theme_cowplot()+
+  geom_hline(yintercept = 0)+
+  scale_x_date(limits = c(ymd("1984-01-01"), ymd("2020-01-01")), date_breaks = "10 years", date_labels = "%Y") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+Indeed, using CEDA data to calculate averages as well as anomolies proves to be a much more logical metric. Cowichan data seems *much* more logical now. 
+
+
+```{r ceda_avg, echo=F, message=F, warning=F}
+# min(montlycru$plotdate)
+# max(montlycru$plotdate)
+
+cruavg <- montlycru %>% 
+  group_by(sitename, Month) %>%
+  summarise(avg_precip = mean(`pre_mm/month`, na.rm = T),
+         avg_temp = mean(`tmp_degrees_Celsius`, na.rm = T), 
+         N = n())
+
+ClimChange <- montlycru %>%
+  full_join(cruavg) %>%
+  mutate(TempDifference = tmp_degrees_Celsius - avg_temp) %>%
+  mutate(PrecipDifference = `pre_mm/month` - avg_precip) %>%
+  separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
+  dplyr::select(-b)
+
+# ClimChange %>% filter(site=="sval") %>%
+#   ggplot(aes(x=plotdate, y=TempDifference))+
+#   geom_point()+
+#   geom_smooth(method = "lm")+
+#   facet_wrap(~Month)+
+#   labs(y = "Anomaly from 39 yrs CEDA data, celsius", x = "Year", title = "Temperature Anomalies, Svalbard")+
+#   theme_cowplot()+
+#   geom_hline(yintercept = 0)+
+#   scale_x_date(limits = c(ymd("1984-01-01"), ymd("2020-01-01")), date_breaks = "10 years", date_labels = "%Y") +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ClimChange %>% filter(site=="cowi") %>%
+  ggplot(aes(x=plotdate, y=PrecipDifference))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month)+
+  labs(y = "Anomaly from 39 yrs CEDA data, mm", x = "Year", title = "Precip Anomalies, Cowichan")+
+  theme_cowplot()+
+  geom_hline(yintercept = 0)+
+  scale_x_date(limits = c(ymd("1984-01-01"), ymd("2020-01-01")), date_breaks = "10 years", date_labels = "%Y") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
 ## Nitrogen deposition data
 
@@ -303,7 +419,7 @@ Download data onto local machine
 ```{r ndep}
 ndep <- raster(paste0(localdir, '/N-deposition1993.tif'))
 
-ndep_merge <- raster::extract(ndep, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
+ndep_merge <- raster::extract(ndep, sites_nutnet_sp2, fun = max, df = TRUE) %>%
   mutate(sitename = sites_nutnet_sp2$site_code) %>%
   separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
   dplyr::select(-b, -ID)
