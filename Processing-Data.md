@@ -93,24 +93,9 @@ Indeed, using CEDA data to calculate averages as well as anomolies
 proves to be a much more logical metric. Cowichan data seems *much* more
 logical now.
 
-    ## [1] "1981-01-16"
-
-    ## [1] "2019-12-16"
-
 ![](Processing-Data_files/figure-gfm/ceda_avg-1.png)<!-- -->
 
 ## Nitrogen deposition data
 
-Download data onto local machine
-
-``` r
-# ndep <- raster(paste0(localdir, '/N-deposition1993.tif'))
-# 
-# ndep_merge <- raster::extract(ndep, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-#   mutate(sitename = sites_nutnet_sp2$site_code) %>%
-#   separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
-#   dplyr::select(-b, -ID)
-# 
-# summary(ndep_merge)
-# # plot(ndep, main = "N Deposition modeled for 1993")
-```
+Download data onto local machine. **NOTE: this is not currently working;
+projections issue not registering….**

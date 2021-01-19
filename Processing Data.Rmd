@@ -42,14 +42,15 @@ process_raw <- FALSE #TRUE
 
 ```{r moresetup, echo=F, include = F}
 #for some of the analyses need to change the spatial form
-sites2 <- sites %>%
+sites_nutnet <- sites %>%
   dplyr::select(site_code, "GEE coordinates") %>%
   separate("GEE coordinates", sep = ',', into = c('long', 'lat')) %>%
   filter(!is.na(long)) %>%
-  mutate(lat = as.numeric(lat), long = as.numeric(long)) 
-coordinates(sites2) <- ~long + lat
+  mutate(lat = as.numeric(lat), long = as.numeric(long))
+sites_nutnet_sp <- sites_nutnet
+coordinates(sites_nutnet_sp) <- ~long + lat
 
-sites_nutnet_sp2<- sites2 %>% st_as_sf()
+sites_nutnet_sp2<- sites_nutnet_sp %>% st_as_sf()
 ```
 
 And just for fun, here is a map of the sites in this analysis
@@ -414,17 +415,15 @@ ClimChange %>% filter(site=="cowi") %>%
 
 ## Nitrogen deposition data
 
-Download data onto local machine
+Download data onto local machine. **NOTE: this is not currently working; projections issue not registering....**
 
-```{r ndep}
-ndep <- raster(paste0(localdir, '/N-deposition1993.tif'))
-
-ndep_merge <- raster::extract(ndep, sites_nutnet_sp2, fun = max, df = TRUE) %>%
-  mutate(sitename = sites_nutnet_sp2$site_code) %>%
-  separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
-  dplyr::select(-b, -ID)
-
-summary(ndep_merge)
-# plot(ndep, main = "N Deposition modeled for 1993")
-
+```{r ndep, echo=F, include=F}
+# ndep <- raster(paste0(localdir, '/N-deposition1993.tif'),
+#                crs = '+init=EPSG:4326')
+# crs(ndep) <- CRS('+init=EPSG:4326') #https://epsg.io/4326
+# 
+# ndep_merge <- raster::extract(ndep, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+#   mutate(sitename = sites_nutnet_sp2$site_code) %>%
+#   separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
+#   dplyr::select(-b, -ID)
 ```
