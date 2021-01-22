@@ -28,7 +28,7 @@ This document walks through the steps necessary to:
 -
 
 
-Please change `process_raw` equal to `TRUE` if you need to download and process raw data. In most cases, this will likely remain as `FALSE`, becuase intermediate (processed) files *are* stored on GitHub. 
+Please change `process_raw_climate` equal to `TRUE` if you need to download and process raw data. In most cases, this will likely remain as `FALSE`, becuase intermediate (processed) files *are* stored on GitHub. 
 
 You'll need to read in the location of the sites being used in this analysis.
 You'll also need to store some files on your local machine, so set a path to your desired location.
@@ -38,7 +38,7 @@ sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv', col_types = cols())
 localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/pheno_localdata"
 dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
-process_raw <- FALSE #TRUE
+process_raw_climate <- FALSE #TRUE
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -78,7 +78,7 @@ world <- ne_countries(scale = "medium", returnclass = "sf")
 
 ```{r precipdata, echo=F}
 ### create precipitation data for the 4 distinct time periods
-if (process_raw == TRUE) {
+if (process_raw_climate == TRUE) {
 cruv <- "pre"
 timeframe <- '1981.1990.'
 source("./get-CRU-TS.R")
@@ -92,7 +92,7 @@ source("./get-CRU-TS.R")
 timeframe <- '2011.2019.'
 source("./get-CRU-TS.R")
 
-} else print("not processing raw data")
+} else print("not processing raw CLIMATE data")
 ```
 
 
@@ -100,7 +100,7 @@ source("./get-CRU-TS.R")
 
 
 ```{r temperaturedata, echo = F}
-if (process_raw == TRUE) {
+if (process_raw_climate == TRUE) {
 cruv <- 'tmp'
 timeframe <- '1981.1990.'
 source("./get-CRU-TS.R")
@@ -113,14 +113,14 @@ source("./get-CRU-TS.R")
 
 timeframe <- '2011.2019.'
 source("./get-CRU-TS.R")
-} else print("not processing raw data")
+} else print("not processing raw CLIMATE data")
 
 ```
 
 3) Write a dataframe with merged monthly temperature and precipitation data
 
 ```{r climatedf, echo=F}
-if (process_raw == TRUE) {
+if (process_raw_climate == TRUE) {
 eightys <- read_csv("./data/weather/CRU-monthly-tmp1981.1990.csv", col_types = cols()) %>% 
   full_join(read_csv("./data/weather/CRU-monthly-pre1981.1990.csv", col_types = cols())) %>%
   dplyr::select(-date, -month, -year)
@@ -146,17 +146,17 @@ write.csv(
   './data/weather/monthlyweather.csv',
   row.names = F
 )
-} else print("not processing raw data")
+} else print("not processing raw CLIMATE data")
 
 ```
 
-4) Download [30 year averages from WorldClim](https://www.worldclim.org/data/worldclim21.html) onto your local machine. Download the most detailed spatial level (30 seconds) for:
+4) **See point #5**, but in general.... Download [30 year averages from WorldClim](https://www.worldclim.org/data/worldclim21.html) onto your local machine. Download the most detailed spatial level (30 seconds) for:
 
 - average temperature (tavg_30s)
 - precipitaiton (preci_30s)
 
 ```{r worldclim, echo=F}
-if (process_raw == TRUE) {
+if (process_raw_climate == TRUE) {
 
 #####
 # temperature
@@ -324,7 +324,7 @@ write.csv(
   row.names = F
 )
 
-} else print("not processing raw data")
+} else print("not processing raw CLIMATE data")
 
 
 ```
@@ -443,16 +443,15 @@ ndep <- read_csv(paste0(dropboxdir, "/site-n-deposition-07-December-2020.csv")) 
 
 ```
 
-## Process site-specific info
+## Process site-specific info (biomass, richness, etc)
 
-Need to connect to dropbox, this will be different for each user
-```{r connectDB, message=F, warning=F}
+Connect to the NutNet Dropbox, and go from there. 
+
+```{r siteinfo, echo=F, message=F, warning=F}
 dropbox <- read_csv(paste0(dropboxdir, '/comb-by-plot-clim-soil-diversity-07-December-2020.csv'), 
                     col_types = cols(),
                     na = c("NULL", "NA"))
-```
 
-```{r siteinfo, echo=F, message=F, warning=F}
 siteclim<- dropbox %>%
   filter(trt == "Control") %>%
   separate(site_code, into = c('site', 'country'), sep='[.]') %>%
@@ -481,15 +480,15 @@ obsyr_even <- dropbox %>%
     separate(site_code, into = c('site', 'country'), sep='[.]') %>% 
   dplyr::select(-country)
 
-obsyr_even %>%
-  ggplot(aes(x = ObsYrMeanEven, y = ObsYrMeanInvSimp)) + 
-  geom_point()
+# obsyr_even %>%
+#   ggplot(aes(x = ObsYrMeanEven, y = ObsYrMeanInvSimp)) + 
+#   geom_point()
   
 region <- dropbox %>%
   separate(site_code, into = c('site', 'country'), sep='[.]') %>% 
   dplyr::select(site, continent, habitat, latitude, longitude)
 
-SiteInfo <- ndep_merge %>% 
+SiteInfo <- ndep %>% 
   left_join(region) %>% 
   inner_join(siteclim) %>%
   left_join(obsyr_even)
@@ -524,5 +523,697 @@ yrprod <- yrprod1 %>% group_by(site) %>%
 #   labs(x = "", title = "Biomass Production")
 # 
 ```
+
+
+## Collect the Landsat NDVI data
+
+For this analyses, I have focused on Landsat Satelites 4, 5, 7, and 8. All have a resolution of 30 m. Prior Landsats were more coarse (LS 1 & 2 = 80 m resolution, LS 3 = 40 m resolution). In [google earth engine](https://code.earthengine.google.com/), I have processed the top of atmosphere values, filtered data by band quality, and included both [tier 1 and tier 2 data](https://www.usgs.gov/core-science-systems/nli/landsat/landsat-collection-1?qt-science_support_page_related_con=1#qt-science_support_page_related_con). From tier 1 data, readings which indicated clear conditions or snow cover at time of imagery were kept. From tier 2 data, NDVI was only used when the band quality indicated snow cover. Tier 2 data were used as a supplement, because the snow covered satelite images were often not included tier 1 data. It is important to have sufficient landsat data coverage during snow-covered periods (if applicable!) so that accurate "troughs" can be identified.
+
+As an FYI, Landsat coverage improved greatly with satelites 7 and 8. As such, some sites have very sparse coverage prior to 1999. However, the  scan-line corrector on landsat 7 failed on June 2003, meaning that some sites again had only spotty coverage until landsat 8's launch in 2003. 
+
+At each NutNet site, I picked an adjacent area to the experimental plot locations. There, I took a 30 m buffer radius (a couple sites are different - see GEE code) around that point to be our "site." Sometimes this meant that multiple paths/rows of landsat were included, which is fine. Sometimes it might mean that the NutNet site is not accurately reflected in our data (if for example a grassland site occurs admist a bunch of trees...those trees might get included by using this method). Essentially, if the NDVI data looks really bad for a specific site, the accuracy and relevance of the location I chose is probably the first thing to check - how accurately does our designated "region of interest" reflect the landscape?
+
+In google earth engine, the following was run. Apologies that it's long, messy, and that I'm not very good at creating loops within loops in JavaScript! There are some button options that pop up in GEE prompting the various extracted data to be saved. And that each site needs to get individually commented out and run. It's not pretty - but it does work well!!!
+
+```GEE code not shown here due to length, but feel free to look at it in the markdown file```
+```{r, include=F, echo=F}
+
+# ## GEE code
+# //create ROI
+# /*
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(18.724477, 68.366069), {label:'abisko_se'}).buffer(30)]); //UPDATED
+# var NAME = 'abisko_se';
+# 
+# var NAME = 'ahth_is'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-123.014311, 48.465041), {label:'amcamp_us'}).buffer(30)]);//UPDATED 
+# var NAME = 'amcamp_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-19.672060, 65.133350), {label:'amlr_is'}).buffer(30)]); 
+# var NAME = 'amlr_is'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-78.162, -0.467083333), {label:'anti_ec'}).buffer(30)]); 
+# var NAME = 'anti_ec'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-81.218472, 27.170194), {label:'arch_us'}).buffer(30)]);//UPDATED 
+# var NAME = 'arch_us' 
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(101.865677, 33.670918), {label:'azitwo_cn'}).buffer(30)]); //UPDATED
+# var NAME = 'azitwo_cn';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(11.880336, 51.391717), {label:'badlau_de'}).buffer(30)]); //UPDATED
+# var NAME = 'badlau_de' 
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-71.152318, -41.006807), {label:'bari_ar'}).buffer(30)]);
+# var NAME = 'bari_ar';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-99.652173, 42.245453), {label:'barta_us'}).buffer(30)]);
+# var NAME = 'barta_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(11.584053, 49.921323), {label:'bayr_de'}).buffer(30)]);
+# var NAME = 'bayr_de';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-105.233063, 39.972852), {label:'bldr_us'}).buffer(30)]);
+# var NAME = 'bldr_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-95.087419, 39.596985), {label:'bnbt_us'}).buffer(30)]);
+# var NAME = 'bnbt_us' 
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.966830, 44.278458), {label:'bnch_us'}).buffer(30)]);
+# var NAME = 'bnch_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(147.253979, -36.873971), {label:'bogong_au'}).buffer(30)]);
+# var NAME = 'bogong_au';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.958134, 44.277013), {label:'bttr_us'}).buffer(30)]);
+# var NAME = 'bttr_us'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(151.606325, -26.892224), {label:'bunya_au'}).buffer(30)]);
+# var NAME = 'bunya_au' 
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(151.139265, -27.735334), {label:'burrawan_au'}).buffer(30)]);
+# var NAME = 'burrawan_au';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-8.992624, 53.072023), {label:'burren_ie'}).buffer(30)]);
+# var NAME = 'burren_ie' 
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(82.708800, 42.884700), {label:'bynb_cn'}).buffer(30)]);
+# var NAME = 'bynb_cn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-93.384990, 41.784526), {label:'cbgb_us'}).buffer(30)]);
+# var NAME = 'cbgb_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-93.211968, 45.427225), {label:'cdcr_us'}).buffer(30)]);
+# var NAME = 'cdcr_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-101.643424, 41.206284), {label:'cdpt_us'}).buffer(30)]);
+# var NAME = 'cdpt_us';
+# 
+# var NAME = 'cereep_fr'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-58.264246, -36.275950), {label:'chilcas_ar'}).buffer(30)]);
+# var NAME = 'chilcas_ar';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-8.791102, 38.829049), {label:'comp_pt'}).buffer(30)]);
+# var NAME = 'comp_pt';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-123.635063, 48.808390), {label:'cowi_ca'}).buffer(30)]); //UPDATED
+# var NAME = 'cowi_ca';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(144.791878, -37.806923), {label:'derr_au'}).buffer(30)]);
+# var NAME = 'derr_au';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-96.855257, 40.695596), {label:'doane_us'}).buffer(30)]);
+# var NAME = 'doane_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(29.267586, -28.961042), {label:'drake_za'}).buffer(30)]);
+# var NAME = 'drake_za'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.05025, 36.984861), {label:'elkh_us'}).buffer(30)]);
+# var NAME = 'elkh_us';
+# */
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-117.090227, 32.892409),{label:'elliot_us'}).buffer(30)]); 
+# var NAME = 'elliot_us';
+# /*
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(26.353695, 58.257967), {label:'elva_ee'}).buffer(30)]);
+# var NAME = 'elva_ee';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(138.474286, -23.756611), {label:'ethamc_au'}).buffer(30)]);
+# var NAME = 'ethamc_au'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(138.398970, -23.638610), {label:'ethass_au'}).buffer(30)]);
+# var NAME = 'ethass_au'
+# 
+# var NAME = 'fnly_us'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(7.827216, 48.020054), {label:'free_de'}).buffer(30)]);
+# var NAME = 'free_de'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(8.540363, 47.114728), {label:'frue_ch'}).buffer(30)]);
+# var NAME = 'frue_ch';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(10.718500, 43.797100), {label:'gall_it'}).buffer(30)]);
+# var NAME = 'gall_it'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(90.233300, 31.383330), {label:'gcnban_cn'}).buffer(30)]);
+# var NAME = 'gcnban_cn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(91.066770, 30.496210), {label:'gcndan_cn'}).buffer(30)]);
+# var NAME = 'gcndan_cn'
+# 
+# var NAME = 'gcnhai_cn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(102.577863, 32.828816), {label:'gcnhon_cn'}).buffer(30)]);
+# var NAME = 'gcnhon_cn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(119.951580, 49.333000), {label:'gcnhul_cn'}).buffer(30)]);
+# var NAME = 'gcnhul_cn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(92.009700, 31.643700), {label:'gcnnaq_cn'}).buffer(30)]);
+# var NAME = 'gcnnaq_cn'
+# 
+# var NAME = 'gcnsui_cn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(106.966670, 41.416670), {label:'gcnura_cn'}).buffer(30)]);
+# var NAME = 'gcnura_cn'
+# 
+# var NAME = 'gcnxil_cn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(106.929611, 37.309860), {label:'gcnyan_cn'}).buffer(30)]);
+# var NAME = 'gcnyan_cn'
+# 
+# var NAME = 'gcnyou_cn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(30.292178, -29.284046), {label:'gilb_za'}).buffer(30)]);
+# var NAME = 'gilb_za'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-123.035557, 46.869083), {label:'glac_us'}).buffer(30)]); 
+# var NAME = 'glac_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-96.1396933, 41.339757), {label:'glcr_us'}).buffer(30)]); 
+# var NAME = 'glcr_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-86.702686, 36.872137), {label:'hall_us'}).buffer(30)]); 
+# var NAME = 'hall_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-119.497670, 42.723745), {label:'hart_us'}).buffer(30)]);
+# var NAME = 'hart_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.551652, 36.386708), {label:'hast_us'}).buffer(30)]); //UPDATED
+# var NAME = 'hast_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-0.645026, 51.413098), {label:'hero_uk'}).buffer(30)]);
+# var NAME = 'hero_uk';
+# 
+# var NAME = 'hnvr_us'
+# 
+# var NAME = 'hogone_us'
+# 
+# var NAME = 'hogtwo_us'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-123.061648, 39.011633), {label:'hopl_us'}).buffer(30)]);
+# var NAME = 'hopl_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(105.967778, 47.666528), {label:'hustai_mn'}).buffer(30)]);
+# var NAME = 'hustai_mn'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.241545, 37.405222), {label:'jasp_us'}).buffer(30)]);
+# var NAME = "jasp_us"
+# 
+# var NAME = 'jena_de';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-106.787094, 32.530054), {label:'jorn_us'}).buffer(30)]);
+# var NAME = 'jorn_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(18.323098, 68.392169), {label:'kark_se'}).buffer(30)]);
+# var NAME = 'kark_se';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-85.391144, 42.409125), {label:'kbs_us'}).buffer(30)]);
+# var NAME = 'kbs_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(78.008754, 32.319508), {label:'kibber_in'}).buffer(30)]);
+# var NAME = "kibber_in"
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(130.951768, -16.110229), {label:'kidman_au'}).buffer(30)]);
+# var NAME = 'kidman_au';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(20.87352408,  69.05678545), {label:'kilp_fi'}).buffer(30)]);
+# var NAME = 'kilp_fi';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(143.851472, -36.324810), {label:'kiny_au'}).buffer(30)]);
+# var NAME = 'kiny_au';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(23.794941, 58.710601), {label:'kirik_ee'}).buffer(30)]);
+# var NAME = "kirik_ee";
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-79.537881, 44.024616), {label:'koffler_ca'}).buffer(30)]);
+# var NAME = 'koffler_ca';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-96.582323, 39.070328), {label:'konz_us'}).buffer(30)]);
+# var NAME = 'konz_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-51.798613, -20.983784), {label:'lagoas_br'}).buffer(30)]);
+# var NAME = 'lagoas_br';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-95.182989, 43.384792), {label:'lake_us'}).buffer(30)]);
+# var NAME = 'lake_us';
+# 
+# var NAME = 'lakta_se';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-2.627710, 53.985674), {label:'lancaster_uk'}).buffer(30)]);
+# var NAME = 'lancaster_uk';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-124.048400, 46.614900), {label:'lead_us'}).buffer(30)]);
+# var NAME = 'lead_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.128676, 44.205263), {label:'look_us'}).buffer(30)]);
+# var NAME = 'look_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-101.897343, 33.600589), {label:'lubb_us'}).buffer(30)]);
+# var NAME = 'lubb_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-57.424151, -37.714602), {label:'marc_ar'}).buffer(30)]);
+# var NAME = 'marc_ar';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-77.042078, 39.527459), {label:'mcdan_us'}).buffer(30)]);
+# var NAME = 'mcdan_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.407466, 38.864058), {label:'mcla_us'}).buffer(30)]);
+# var NAME = 'mcla_us';
+# 
+# var NAME = 'meto_us'''
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(143.321660, -22.483803), {label:'mitch_au'}).buffer(30)]);
+# var NAME = 'mitch_au';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-114.000646,  46.664443), {label:'msla_us'}).buffer(30)]);
+# var NAME = 'msla_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-96.453980, 46.870938), {label:'msum_us'}).buffer(30)]);
+# var NAME = 'msum_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(117.611742, -31.781354), {label:'mtca_au'}).buffer(30)]);
+# var NAME = 'mtca_au';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(137.661096, 35.231685), {label:'neba_jp'}).buffer(30)]);
+# var NAME = 'neba_jp'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(146.006711, -36.895778), {label:'nilla_au'}).buffer(30)]);
+# var NAME = 'nilla_au';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(5.749875, 52.059696), {label:'nioo_nl'}).buffer(30)]);
+# var NAME = 'nioo_nl';
+# 
+# var NAME = 'niwo_us'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(106.886887, 47.769495), {label:'ovor_mn'}).buffer(30)]);
+# var NAME = 'ovor_mn';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-64.434831, -36.586107), {label:'pampa_ar'}).buffer(30)]);
+# var NAME = 'pampa_ar';
+# 
+# var NAME = 'pape_de';
+# 
+# var NAME = 'pich_ec'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(116.972561, -32.496899), {label:'ping_au'}).buffer(30)]);
+# var NAME = 'ping_au'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(152.923522, -27.530424), {label:'pinj_au'}).buffer(30)]);
+# var NAME = 'pinj_au';
+# 
+# var NAME = 'podo_ec'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-70.407124, -51.914837), {label:'potrok_ar'}).buffer(30)]);
+# var NAME = 'potrok_ar';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-90.169865, 30.517510), {label:'ramsay_us'}).buffer(30)]);
+# var NAME = 'ramsay_us';
+# 
+# var NAME = 'rook_uk';
+# 
+# var NAME = "saana_fi';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-120.239269, 39.430489), {label:'sage_us'}).buffer(30)]);
+# var NAME = 'sage_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-99.166935, 39.085843), {label:'saline_us'}).buffer(30)]);
+# var NAME = 'saline_us';
+# 
+# var NAME = 'sava_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-120.021470, 34.696911), {label:'sedg_us'}).buffer(30)]);
+# var NAME = 'sedg_us'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(34.857533, -2.429138), {label:'sereng_tz'}).buffer(30)]);
+# var NAME = 'sereng_tz';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-106.691175, 34.360198), {label:'sevi_us'}).buffer(30)]);
+# var NAME = 'sevi_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-104.767174, 40.816332), {label:'sgs_us'}).buffer(30)]);
+# var NAME = 'sgs_us'
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-112.196699, 44.244893), {label:'shps_us'}).buffer(30)]);
+# var NAME = 'shps_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.283696, 39.235510), {label:'sier_us'}).buffer(30)]);
+# var NAME = 'sier_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(74.742883, 14.419046), {label:'sirsi_in'}).buffer(30)]);
+# var NAME = 'sirsi_in';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-122.624726, 48.206135), {label:'smith_us'}).buffer(30)]);
+# var NAME = 'smith_us';
+# 
+# var NAME = 'spin_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-64.170575, -42.654068), {label:'spv_ar'}).buffer(30)]);
+# var NAME = 'spv_ar';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(30.716644, -29.810615), {label:'summ_za'}).buffer(30)]);
+# var NAME = 'summ_za';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point( 16.44713167, 78.69017773 ), {label:'sval_no'}).buffer(30)]);
+# var NAME = 'sval_no';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-97.349443, 31.044188), {label:'temple_us'}).buffer(30)]);
+# var NAME = 'temple_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-17.090214, 65.901294), {label:'thth_is'}).buffer(30)]);
+# var NAME = 'thth_is';
+# 
+# var NAME = 'tmlr_is';
+# 
+# var NAME = 'trel_us';
+# 
+# var NAME = 'tyso_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-121.740563, 36.867430), {label:'ucsc_us'}).buffer(30)]);
+# var NAME = 'ucsc_us';
+# 
+# var NAME = "ufrec.us";
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(30.412772, -29.670833), {label:'ukul_za'}).buffer(30)]);
+# var NAME = 'ukul_za';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-79.019186, 36.007745), {label:'unc_us'}).buffer(30)]);
+# var NAME = 'unc_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-81.317171, 43.192809), {label:'uwo_ca'}).buffer(30)]);
+# var NAME = 'uwo_ca';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(10.371966, 46.632543), {label:'valm_ch'}).buffer(30)]);
+# var NAME = 'valm_ch';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-101.609734, 21.783367), {label:'vaqu_mx'}).buffer(30)]);
+# var NAME = 'vaqu_mx';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(29.089939, 70.308117), {label:'varexp_no'}).buffer(30)]);
+# var NAME = 'varexp_no';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(29.539800, 70.327970), {label:'vargrass_no'}).buffer(30)]);
+# var NAME = 'vargrass_no';
+# 
+# var NAME = 'varheath_no';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(18.274396, 68.416979), {label:'vass_se'}).buffer(30)]);
+# var NAME = 'vass_se';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(-111.579722, 33.583333), {label:'wapatki_us'}).buffer(30)]);
+# var NAME = 'wapatki_us';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(116.673782, 43.551476), {label:'xilin_cn'}).buffer(30)]);
+# var NAME = 'xilin_cn';
+# 
+# var site = ee.FeatureCollection([ee.Feature(ee.Geometry.Point(150.738804, -33.614034), {label:'yarra_au'}).buffer(30)]);
+# var NAME = 'yarra_au';
+# 
+# */
+# 
+# 
+# //LS 8
+# var addNDVI_8 = function(image){
+#   return image
+#   .addBands(image.normalizedDifference(['B5','B4'])
+#   .rename('NDVI'))
+#   .float();
+# };
+# 
+# //LS 754
+# var addNDVI_754 = function(image){
+#   return image
+#   .addBands(image.normalizedDifference(['B4','B3'])
+#   .rename('NDVI'))
+#   .float();
+# };
+# 
+# 
+# //abisko
+# var site_LS8 = ee.ImageCollection('LANDSAT/LC08/C01/T1_TOA')
+#   .map(addNDVI_8)
+#   .select('NDVI','BQA')
+#   .getRegion(site, 30);
+# 
+# var site_LS7 = ee.ImageCollection('LANDSAT/LE07/C01/T1_TOA')
+#   .map(addNDVI_754)
+#   .select('NDVI','BQA')
+#   .getRegion(site, 30);
+# 
+# var site_LS5 = ee.ImageCollection('LANDSAT/LT05/C01/T1_TOA')
+#   .map(addNDVI_754)
+#   .select('NDVI','BQA')
+#   .getRegion(site, 30);
+#   
+# var site_LS4 = ee.ImageCollection('LANDSAT/LT04/C01/T1_TOA')
+#   .map(addNDVI_754)
+#   .select('NDVI','BQA')
+#   .getRegion(site, 30);
+#   
+# var site_LS4_t2 = ee.ImageCollection('LANDSAT/LT04/C01/T2_TOA')
+#   .map(addNDVI_754)
+#   .select('NDVI','BQA')
+#   .getRegion(site, 30);  
+# 
+# var site_LS5_t2 = ee.ImageCollection('LANDSAT/LT05/C01/T2_TOA')
+#   .map(addNDVI_754)
+#   .select('NDVI','BQA')
+#   .getRegion(site, 30);
+#   
+# var site_LS7_t2 = ee.ImageCollection('LANDSAT/LE07/C01/T2_TOA')
+#   .map(addNDVI_754)
+#   .select('NDVI','BQA')
+#   .getRegion(site, 30);  
+# 
+# var site_LS8_t2 = ee.ImageCollection('LANDSAT/LC08/C01/T2_TOA')
+#   .map(addNDVI_8)
+#   .select('NDVI','BQA')
+#   .getRegion(site, 30);
+# 
+# 
+# var site_8 = ee.FeatureCollection(site_LS8.map(function(list) {
+#     var list = ee.List(list)
+#     var dict = {
+#         col1: list.get(0),
+#         col2: list.get(1),
+#         col3: list.get(2),
+#         col4: list.get(4),
+#         col5: list.get(5),
+#     };
+#     return ee.Feature(null, dict);
+# }));
+# 
+# var site_7 = ee.FeatureCollection(site_LS7.map(function(list) {
+#     var list = ee.List(list)
+#     var dict = {
+#         col1: list.get(0),
+#         col2: list.get(1),
+#         col3: list.get(2),
+#         col4: list.get(4),
+#         col5: list.get(5),
+#     };
+#     return ee.Feature(null, dict);
+# }));
+# 
+# var site_5 = ee.FeatureCollection(site_LS5.map(function(list) {
+#     var list = ee.List(list)
+#     var dict = {
+#         col1: list.get(0),
+#         col2: list.get(1),
+#         col3: list.get(2),
+#         col4: list.get(4),
+#         col5: list.get(5),
+#     };
+#     return ee.Feature(null, dict);
+# }));
+# 
+# var site_4 = ee.FeatureCollection(site_LS4.map(function(list) {
+#     var list = ee.List(list)
+#     var dict = {
+#         col1: list.get(0),
+#         col2: list.get(1),
+#         col3: list.get(2),
+#         col4: list.get(4),
+#         col5: list.get(5),
+#     };
+#     return ee.Feature(null, dict);
+# }));
+# 
+# //
+# var site_4_t2 = ee.FeatureCollection(site_LS4_t2.map(function(list) {
+#     var list = ee.List(list)
+#     var dict = {
+#         col1: list.get(0),
+#         col2: list.get(1),
+#         col3: list.get(2),
+#         col4: list.get(4),
+#         col5: list.get(5),
+#     };
+#     return ee.Feature(null, dict);
+# }));
+# var site_5_t2 = ee.FeatureCollection(site_LS5_t2.map(function(list) {
+#     var list = ee.List(list)
+#     var dict = {
+#         col1: list.get(0),
+#         col2: list.get(1),
+#         col3: list.get(2),
+#         col4: list.get(4),
+#         col5: list.get(5),
+#     };
+#     return ee.Feature(null, dict);
+# }));
+# var site_7_t2 = ee.FeatureCollection(site_LS7_t2.map(function(list) {
+#     var list = ee.List(list)
+#     var dict = {
+#         col1: list.get(0),
+#         col2: list.get(1),
+#         col3: list.get(2),
+#         col4: list.get(4),
+#         col5: list.get(5),
+#     };
+#     return ee.Feature(null, dict);
+# }));
+# var site_8_t2 = ee.FeatureCollection(site_LS8_t2.map(function(list) {
+#     var list = ee.List(list)
+#     var dict = {
+#         col1: list.get(0),
+#         col2: list.get(1),
+#         col3: list.get(2),
+#         col4: list.get(4),
+#         col5: list.get(5),
+#     };
+#     return ee.Feature(null, dict);
+# }));
+# 
+# Export.table.toDrive({
+#   collection: site_8,
+#   description: NAME.concat('_ls8_t1'), //job name
+#   folder: 'annoying manual',
+#   fileFormat: 'CSV'
+# });
+# 
+# Export.table.toDrive({
+#   collection: site_7,
+#   description: NAME.concat('_ls7_t1'), //job name
+#   folder: 'annoying manual',
+#   fileFormat: 'CSV'
+# });
+# 
+# Export.table.toDrive({
+#   collection: site_5,
+#   description: NAME.concat('_ls5_t1'), //job name
+#   folder: 'annoying manual',
+#   fileFormat: 'CSV'
+# });
+# 
+# Export.table.toDrive({
+#   collection: site_4,
+#   description: NAME.concat('_ls4_t1'), //job name
+#   folder: 'annoying manual',
+#   fileFormat: 'CSV'
+# });
+# 
+# Export.table.toDrive({
+#   collection: site_8_t2,
+#   description: NAME.concat('_ls8_t2'), //job name
+#   folder: 'annoying manual',
+#   fileFormat: 'CSV'
+# });
+# 
+# Export.table.toDrive({
+#   collection: site_7_t2,
+#   description: NAME.concat('_ls7_t2'), //job name
+#   folder: 'annoying manual',
+#   fileFormat: 'CSV'
+# });
+# 
+# Export.table.toDrive({
+#   collection: site_5_t2,
+#   description: NAME.concat('_ls5_t2'), //job name
+#   folder: 'annoying manual',
+#   fileFormat: 'CSV'
+# });
+# 
+# Export.table.toDrive({
+#   collection: site_4_t2,
+#   description: NAME.concat('_ls4_t2'), //job name
+#   folder: 'annoying manual',
+#   fileFormat: 'CSV'
+# });
+
+```
+
+## Process the NDVI data
+
+There are seemingly infiniate ways to process NDVI to pick out phenological dates. Quickly, we fitted cubic splines to each growing season at each site. We found that a single spline fit to each site (incompassing all growing years) was too sensitive to years with large spans of time without NDVI values. Then, we picked out the maximum NDVI from the fitted spline in each growing season. And the first date where NDVI >= 50 of the average range of NDVI (plus the avg. min) (as a green-up threshold). Originally I had used a fancy combination of derivatives (Buitenwerf et al), but they turned out to be very sensitive to missing values (problematic in snow-covered regions). 
+
+
+Behind the scenes, some fancy (and not-so-fancy) data processing happened: 
+1) dates were treated as radians to accomodate southern hemisphere and mediterranean sites with potential phenological dates spanning across years within the same growing season (for instance, a site with green-up in Dec 2018, NDVI max in March 2019, and brown down in May 2019; this is all classified as occuring during the 2019 growing season.)
+2) At certain sites there are periods of the year where NDVI data are not available, either becuase of persistant seasonal clouds, algorithm confusion between clouds and snow (aka water refelctance), or poor radiometric calibration on the landsat satelites. Conversely, there may often be time periods in which the 10-day average landsat coverage of a site is way more frequent (for example, periods when both landsat 7 and 8 orbit, etc).  
+3) NDVI values which were < 0 were reassigned a value of 0. This helped the fitted splines behave much better. 
+4) Regarding weighting points within the splines, each growing season's maximum NDVI value was weighted at 1, and all other values at 0.5 in order to most accurately capture the peak. 
+
+Also, some sites are strange - need to contact PIs eventually.
+* lake_us, lakta_se, marc_ar, mitch_au, tyso_us, valm_ch, xilin_cn, bldr_us all needed larger radius buffers
+
+Going thru the setps in more detail:
+
+1) Create functions to convert linear (julian) calendar days into radian (circular) data. (becuase southern hemisphere/mediterranean sites which green up on, say julian day 365 on average...but if one year greens up on julian day 1, this is a 1 day difference NOT a -365 day difference)
+
+```{r radianfxn echo=F}
+circmean_degrees <- function (x)
+{
+  x_radians <- x * pi / 180
+  sinr <- sum(sin(x_radians))
+  cosr <- sum(cos(x_radians))
+  circmean_radians <- atan2(sinr, cosr)
+  circmean_degree <- circmean_radians / pi * 180
+  circmean_degree
+}
+
+circ_degrees <- function (x)
+{
+  x_radians <- x * pi / 180
+  sinr <- (sin(x_radians))
+  cosr <- (cos(x_radians))
+  circmean_radians <- atan2(sinr, cosr)
+  circmean_degree <- circmean_radians / pi * 180
+  circmean_degree
+}
+```
+
+2) Actually convert linear calendar years into circular data. Also filter the Landsat data to include only pixels identified as being "clear" or "snow" covered. Also we set the minimum NDVI to 0. 
+
+```{r readinphenodata, eval = T, echo = F, message = F, warning = F}
+pheno_path <- paste0(localdir, "/annoying manual")   # path to the data
+pheno_files <- dir(pheno_path, pattern = "*.csv") # get file names
+pheno_files_all <- tibble(filename = pheno_files) %>%
+  mutate(file_contents = map(filename,
+                             ~ read_csv(file.path(pheno_path, .),
+                                        skip = 2,  col_type = cols(), col_names = FALSE)))   %>%
+  unnest() %>%
+  rename(row = X1, id = X2, longitude = X3, latitude = X4, NDVI = X5, BQA = X6, geo = X7) %>%
+  select(-row, -geo) %>%
+  filter(!is.na(NDVI), !is.na(BQA)) %>%
+  separate(filename, sep = "_", into = c("site", "country", "ls", "tier")) %>%
+  separate(id, sep="_", into = c('landsat', 'path', 'date')) %>% 
+  mutate(Date = ymd(date)) 
+
+intp <- read_csv('./interpretation.csv', col_types = cols())
+
+pheno_data <- pheno_files_all %>% 
+  full_join(intp) %>%
+  filter(remove=='keep') %>%
+  filter(!is.na(NDVI), !is.na(BQA)) %>%
+  group_by(site, Date) %>%
+  summarise(NDVI = mean(NDVI)) %>%
+  mutate(NDVI = ifelse(NDVI < 0, 0, NDVI)) %>%
+  arrange(site, Date) 
+```
+
+
+
+
 
 

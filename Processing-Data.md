@@ -1,7 +1,7 @@
 NutNet Phenology with NDVI
 ================
 Ellen Esch
-18 January 2021
+22 January 2021
 
 # Overview
 
@@ -20,6 +20,7 @@ location.
 ``` r
 sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv', col_types = cols())
 localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/pheno_localdata"
+dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
 process_raw <- FALSE #TRUE
 ```
@@ -95,7 +96,22 @@ logical now.
 
 ![](Processing-Data_files/figure-gfm/ceda_avg-1.png)<!-- -->
 
-## Nitrogen deposition data
+## Process nitrogen deposition data
 
-Download data onto local machine. **NOTE: this is not currently working;
-projections issue not registering….**
+**NOTE** Previously N deposition was extracted from “F. Dentener, Global
+maps of atmospheric nitrogen deposition, 1860, 1993, and 2050. ORNL DAAC
+(2006)”. However, two things have happened: a) r spatial has a bug (it’s
+known, and I guess they’re working on it so this could be fixed), b) a
+07 Dec 2020 update added n deposition data to the NutNet Dropbox. Thus,
+we are proceeding with the file in the dropbox….
+
+Additionally, note that the new data in the NutNet dropbox allows us to
+better look at *change* in N deposition over time. Since we are
+evaluating phenological/NDVI change over time as well, this seems like a
+logical addition.
+
+## Process site-specific info (biomass, richness, etc)
+
+Connect to the NutNet Dropbox, and go from there.
+
+![](Processing-Data_files/figure-gfm/siteinfo-1.png)<!-- -->
