@@ -36,6 +36,7 @@ You'll also need to store some files on your local machine, so set a path to you
 ```{r filelocations, }
 sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv', col_types = cols())
 localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/pheno_localdata"
+dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
 process_raw <- FALSE #TRUE
 ```
@@ -413,9 +414,11 @@ ClimChange %>% filter(site=="cowi") %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-## Nitrogen deposition data
+## Process nitrogen deposition data
 
-Download data onto local machine. **NOTE: this is not currently working; projections issue not registering....**
+**NOTE** Previously N deposition was extracted from "F. Dentener, Global maps of atmospheric nitrogen deposition, 1860, 1993, and 2050. ORNL DAAC  (2006)". However, two things have happened: a) r spatial has a bug (it's known, and I guess they're working on it so this could be fixed), b) a 07 Dec 2020 update added n deposition data to the NutNet Dropbox. Thus, we are proceeding with the file in the dropbox....
+
+Additionally, note that the new data in the NutNet dropbox allows us to better look at *change* in N deposition over time. Since we are evaluating phenological/NDVI change over time as well, this seems like a logical addition. 
 
 ```{r ndep, echo=F, include=F}
 # ndep <- raster(paste0(localdir, '/N-deposition1993.tif'),
@@ -426,4 +429,100 @@ Download data onto local machine. **NOTE: this is not currently working; project
 #   mutate(sitename = sites_nutnet_sp2$site_code) %>%
 #   separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
 #   dplyr::select(-b, -ID)
+
+ndep <- read_csv(paste0(dropboxdir, "/site-n-deposition-07-December-2020.csv")) %>%
+  dplyr::select(site_code, year, total_deposition) %>%
+  filter(site_code %in% sites_nutnet_sp2$site_code) %>%
+  filter(year == 1984 | year == 2016) %>%
+  pivot_wider(names_from = year, values_from = total_deposition) %>%
+  mutate(ndep_change_2016_1984 = `2016` - `1984`) %>%
+  rename(ndep_2016 = `2016`,
+         ndep_1984 = `1984`) %>%
+  separate(site_code, into = c('site', 'b'), sep = "[.]") %>%
+  dplyr::select(-b)
+
 ```
+
+## Process site-specific info
+
+Need to connect to dropbox, this will be different for each user
+```{r connectDB, message=F, warning=F}
+dropbox <- read_csv(paste0(dropboxdir, '/comb-by-plot-clim-soil-diversity-07-December-2020.csv'), 
+                    col_types = cols(),
+                    na = c("NULL", "NA"))
+```
+
+```{r siteinfo, echo=F, message=F, warning=F}
+siteclim<- dropbox %>%
+  filter(trt == "Control") %>%
+  separate(site_code, into = c('site', 'country'), sep='[.]') %>%
+  group_by(site) %>%
+  summarise(Managed = mean(managed), #sdManaged = sd(managed),
+            Burned = mean(burned), #sdBurned=sd(burned),
+            Elevation = mean(elevation), #sdElevation=sd(elevation),
+            RainMAP = mean(MAP_v2, na.rm=T), #sdRainPET=sd(MAP_v2, na.rm=T),
+            TempMAT = mean(MAT_v2), #sdTempMAT = sd(MAT_v2),
+            Richness = mean(site_richness),#, sdRichness = sd(site_richness))
+            NativeRichness = mean(site_native_richness),
+            IntRichness = mean(site_introduced_richness),
+            FractionExotic = (IntRichness/(NativeRichness+IntRichness)),
+            SoilC = mean(pct_C, na.rm = T),
+            SoilN = mean(pct_N, na.rm = T),
+            SoilP = mean(ppm_P, na.rm = T), 
+            SoilK = mean(ppm_K, na.rm = T)) %>%
+  filter(!is.na(Richness))
+
+
+obsyr_even <- dropbox %>%
+  filter((year == (first_nutrient_year - 1)) | experiment_type == "Observational") %>%
+  group_by(site_code) %>%  #filter(site_code == "lagoas.br")
+  summarise(ObsYrMeanEven = mean(evenness, na.rm = T),
+            ObsYrMeanInvSimp = mean(inverse_simpson, na.rm = T)) %>%
+    separate(site_code, into = c('site', 'country'), sep='[.]') %>% 
+  dplyr::select(-country)
+
+obsyr_even %>%
+  ggplot(aes(x = ObsYrMeanEven, y = ObsYrMeanInvSimp)) + 
+  geom_point()
+  
+region <- dropbox %>%
+  separate(site_code, into = c('site', 'country'), sep='[.]') %>% 
+  dplyr::select(site, continent, habitat, latitude, longitude)
+
+SiteInfo <- ndep_merge %>% 
+  left_join(region) %>% 
+  inner_join(siteclim) %>%
+  left_join(obsyr_even)
+
+# kable(SiteInfo %>%
+#   select(site:SoilK, N.deposition1993)) %>%
+#   kable_styling("striped", full_width = F)
+
+###
+# Site biomass
+###
+yrprod1<- dropbox %>%
+  separate(site_code, into = c('site', 'country'), sep = '[.]') %>%
+  filter(trt == "Control") %>% 
+  group_by(site, year) %>%
+  summarise(ANPP = mean(live_mass, na.rm = T),
+            sdANPP = sd(live_mass, na.rm = T)) %>%
+  rename(gs = year) %>% filter(!is.na(sdANPP))
+
+yrprod <- yrprod1 %>% group_by(site) %>%
+  summarise(YrsBiomass = n()) %>%
+  left_join(yrprod1)
+
+# #plot
+# yrprod %>%
+#   gather(Msmr, Value, -site, -gs) %>%
+#   mutate(Msmr = dplyr::recode(Msmr, "ANPP" = "ANPP g/m2", "sdANPP" = "St. Dev ANPP")) %>%
+#   ggplot(aes(Value)) +
+#   geom_histogram() +
+#   facet_wrap(~ Msmr, scales = "free") +
+#   theme_cowplot() +
+#   labs(x = "", title = "Biomass Production")
+# 
+```
+
+
