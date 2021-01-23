@@ -19,6 +19,8 @@ library("rnaturalearth")
 library("cowplot")
 library("lubridate")
 library("raster")
+library("knitr")
+library("kableExtra")
 ```
 
 # Overview
@@ -30,15 +32,19 @@ This document walks through the steps necessary to:
 
 Please change `process_raw_climate` equal to `TRUE` if you need to download and process raw data. In most cases, this will likely remain as `FALSE`, becuase intermediate (processed) files *are* stored on GitHub. 
 
+Likewise, change `process_raw_ndvi` equal to `TRUE` if you need to process the landsat output. 
+
 You'll need to read in the location of the sites being used in this analysis.
 You'll also need to store some files on your local machine, so set a path to your desired location.
 
 ```{r filelocations, }
-sites <- read_csv('./data/NutNetGreening_2019.10.15_ee.csv', col_types = cols())
+sites <- read_csv("./data/NutNetGreening_2019.10.15_ee.csv", col_types = cols())
 localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/pheno_localdata"
 dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
-process_raw_climate <- FALSE #TRUE
+process_raw_climate <- FALSE # TRUE
+
+process_raw_ndvi <- TRUE # TRUE
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -58,10 +64,10 @@ And just for fun, here is a map of the sites in this analysis
 
 ```{r sitemap, echo=F}
 world <- ne_countries(scale = "medium", returnclass = "sf")
-(ggplot(data = world, label = site)+
+(ggplot(data = world, label = site) +
   geom_sf() +
-  geom_point(data = sites, aes (x = longitude, y = latitude), col = "orange2") +
-  theme_bw()+
+  geom_point(data = sites, aes(x = longitude, y = latitude), col = "orange2") +
+  theme_bw() +
   labs(title = "111 sites in analysis here"))
 ```
 
@@ -79,20 +85,21 @@ world <- ne_countries(scale = "medium", returnclass = "sf")
 ```{r precipdata, echo=F}
 ### create precipitation data for the 4 distinct time periods
 if (process_raw_climate == TRUE) {
-cruv <- "pre"
-timeframe <- '1981.1990.'
-source("./get-CRU-TS.R")
+  cruv <- "pre"
+  timeframe <- "1981.1990."
+  source("./get-CRU-TS.R")
 
-timeframe <- '1991.2000.'
-source("./get-CRU-TS.R")
+  timeframe <- "1991.2000."
+  source("./get-CRU-TS.R")
 
-timeframe <- '2001.2010.'
-source("./get-CRU-TS.R")
+  timeframe <- "2001.2010."
+  source("./get-CRU-TS.R")
 
-timeframe <- '2011.2019.'
-source("./get-CRU-TS.R")
-
-} else print("not processing raw CLIMATE data")
+  timeframe <- "2011.2019."
+  source("./get-CRU-TS.R")
+} else {
+  print("not processing raw CLIMATE data")
+}
 ```
 
 
@@ -101,19 +108,21 @@ source("./get-CRU-TS.R")
 
 ```{r temperaturedata, echo = F}
 if (process_raw_climate == TRUE) {
-cruv <- 'tmp'
-timeframe <- '1981.1990.'
-source("./get-CRU-TS.R")
+  cruv <- "tmp"
+  timeframe <- "1981.1990."
+  source("./get-CRU-TS.R")
 
-timeframe <- '1991.2000.'
-source("./get-CRU-TS.R")
+  timeframe <- "1991.2000."
+  source("./get-CRU-TS.R")
 
-timeframe <- '2001.2010.'
-source("./get-CRU-TS.R")
+  timeframe <- "2001.2010."
+  source("./get-CRU-TS.R")
 
-timeframe <- '2011.2019.'
-source("./get-CRU-TS.R")
-} else print("not processing raw CLIMATE data")
+  timeframe <- "2011.2019."
+  source("./get-CRU-TS.R")
+} else {
+  print("not processing raw CLIMATE data")
+}
 
 ```
 
@@ -121,32 +130,34 @@ source("./get-CRU-TS.R")
 
 ```{r climatedf, echo=F}
 if (process_raw_climate == TRUE) {
-eightys <- read_csv("./data/weather/CRU-monthly-tmp1981.1990.csv", col_types = cols()) %>% 
-  full_join(read_csv("./data/weather/CRU-monthly-pre1981.1990.csv", col_types = cols())) %>%
-  dplyr::select(-date, -month, -year)
+  eightys <- read_csv("./data/weather/CRU-monthly-tmp1981.1990.csv", col_types = cols()) %>%
+    full_join(read_csv("./data/weather/CRU-monthly-pre1981.1990.csv", col_types = cols())) %>%
+    dplyr::select(-date, -month, -year)
 
-ninetys <- read_csv("./data/weather/CRU-monthly-tmp1991.2000.csv", col_types = cols()) %>% 
-  full_join(read_csv("./data/weather/CRU-monthly-pre1991.2000.csv", col_types = cols())) %>%
-  dplyr::select(-date, -month, -year)
+  ninetys <- read_csv("./data/weather/CRU-monthly-tmp1991.2000.csv", col_types = cols()) %>%
+    full_join(read_csv("./data/weather/CRU-monthly-pre1991.2000.csv", col_types = cols())) %>%
+    dplyr::select(-date, -month, -year)
 
-thousands <- read_csv("./data/weather/CRU-monthly-tmp2001.2010.csv", col_types = cols()) %>% 
-  full_join(read_csv("./data/weather/CRU-monthly-pre2001.2010.csv", col_types = cols())) %>%
-  dplyr::select(-date, -month, -year)
+  thousands <- read_csv("./data/weather/CRU-monthly-tmp2001.2010.csv", col_types = cols()) %>%
+    full_join(read_csv("./data/weather/CRU-monthly-pre2001.2010.csv", col_types = cols())) %>%
+    dplyr::select(-date, -month, -year)
 
-tens <- read_csv("./data/weather/CRU-monthly-tmp2011.2019.csv", col_types = cols()) %>% 
-  full_join(read_csv("./data/weather/CRU-monthly-pre2011.2019.csv", col_types = cols())) %>%
-  dplyr::select(-date, -month, -year)
+  tens <- read_csv("./data/weather/CRU-monthly-tmp2011.2019.csv", col_types = cols()) %>%
+    full_join(read_csv("./data/weather/CRU-monthly-pre2011.2019.csv", col_types = cols())) %>%
+    dplyr::select(-date, -month, -year)
 
-monthlyweather <- bind_rows(eightys, ninetys, thousands, tens) %>%
-  rename(sitename = site_code) %>% 
-  mutate(Month = month(plotdate)) 
+  monthlyweather <- bind_rows(eightys, ninetys, thousands, tens) %>%
+    rename(sitename = site_code) %>%
+    mutate(Month = month(plotdate))
 
-write.csv(
-  monthlyweather,
-  './data/weather/monthlyweather.csv',
-  row.names = F
-)
-} else print("not processing raw CLIMATE data")
+  write.csv(
+    monthlyweather,
+    "./data/weather/monthlyweather.csv",
+    row.names = F
+  )
+} else {
+  print("not processing raw CLIMATE data")
+}
 
 ```
 
@@ -158,174 +169,178 @@ write.csv(
 ```{r worldclim, echo=F}
 if (process_raw_climate == TRUE) {
 
-#####
-# temperature
-#####
+  #####
+  # temperature
+  #####
 
-WC1 <- raster(paste0(localdir, '/wc2.1_30s_tavg_01.tif'))
-wc1 <- raster::extract(WC1, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC1 <- raster(paste0(localdir, "/wc2.1_30s_tavg_01.tif"))
+  wc1 <- raster::extract(WC1, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC2 <- raster(paste0(localdir, '/wc2.1_30s_tavg_02.tif'))
-wc2 <- raster::extract(WC2, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC2 <- raster(paste0(localdir, "/wc2.1_30s_tavg_02.tif"))
+  wc2 <- raster::extract(WC2, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC3 <- raster(paste0(localdir, '/wc2.1_30s_tavg_03.tif'))
-wc3 <- raster::extract(WC3, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC3 <- raster(paste0(localdir, "/wc2.1_30s_tavg_03.tif"))
+  wc3 <- raster::extract(WC3, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC4 <- raster(paste0(localdir, '/wc2.1_30s_tavg_04.tif'))
-wc4 <- raster::extract(WC4, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC4 <- raster(paste0(localdir, "/wc2.1_30s_tavg_04.tif"))
+  wc4 <- raster::extract(WC4, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC5 <- raster(paste0(localdir, '/wc2.1_30s_tavg_05.tif'))
-wc5 <- raster::extract(WC5, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC5 <- raster(paste0(localdir, "/wc2.1_30s_tavg_05.tif"))
+  wc5 <- raster::extract(WC5, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC6 <- raster(paste0(localdir, '/wc2.1_30s_tavg_06.tif'))
-wc6 <- raster::extract(WC6, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC6 <- raster(paste0(localdir, "/wc2.1_30s_tavg_06.tif"))
+  wc6 <- raster::extract(WC6, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC7 <- raster(paste0(localdir, '/wc2.1_30s_tavg_07.tif'))
-wc7 <- raster::extract(WC7, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC7 <- raster(paste0(localdir, "/wc2.1_30s_tavg_07.tif"))
+  wc7 <- raster::extract(WC7, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC8 <- raster(paste0(localdir, '/wc2.1_30s_tavg_08.tif'))
-wc8 <- raster::extract(WC8, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC8 <- raster(paste0(localdir, "/wc2.1_30s_tavg_08.tif"))
+  wc8 <- raster::extract(WC8, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC9 <- raster(paste0(localdir, '/wc2.1_30s_tavg_09.tif'))
-wc9 <- raster::extract(WC9, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC9 <- raster(paste0(localdir, "/wc2.1_30s_tavg_09.tif"))
+  wc9 <- raster::extract(WC9, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC10 <- raster(paste0(localdir, '/wc2.1_30s_tavg_10.tif'))
-wc10 <- raster::extract(WC10, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC10 <- raster(paste0(localdir, "/wc2.1_30s_tavg_10.tif"))
+  wc10 <- raster::extract(WC10, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC11 <- raster(paste0(localdir, '/wc2.1_30s_tavg_11.tif'))
-wc11 <- raster::extract(WC11, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  WC11 <- raster(paste0(localdir, "/wc2.1_30s_tavg_11.tif"))
+  wc11 <- raster::extract(WC11, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
-WC12 <- raster(paste0(localdir, '/wc2.1_30s_tavg_12.tif'))
-wc12 <- raster::extract(WC12, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-
-AvgClimate <- full_join(wc1, wc2, by = c("ID", "sitename")) %>%
-  full_join(wc3, by = c("ID", "sitename")) %>%
-  full_join(wc4, by = c("ID", "sitename")) %>%
-  full_join(wc5, by = c("ID", "sitename")) %>%
-  full_join(wc6, by = c("ID", "sitename")) %>%
-  full_join(wc7, by = c("ID", "sitename")) %>%
-  full_join(wc8, by = c("ID", "sitename")) %>%
-  full_join(wc9, by = c("ID", "sitename")) %>%
-  full_join(wc10, by = c("ID", "sitename")) %>%
-  full_join(wc11, by = c("ID", "sitename")) %>%
-  full_join(wc12, by = c("ID", "sitename"))  %>%
-  gather(Month, AvgTempLTA, -ID, -sitename) %>%
-  mutate(Month = recode(Month, "wc2.1_30s_tavg_01" = 1,
-                        "wc2.1_30s_tavg_02" = 2, 
-                        "wc2.1_30s_tavg_03" = 3,
-                        "wc2.1_30s_tavg_04" = 4, 
-                        "wc2.1_30s_tavg_05" = 5,
-                        "wc2.1_30s_tavg_06" = 6,
-                        "wc2.1_30s_tavg_07" = 7, 
-                        "wc2.1_30s_tavg_08" = 8, 
-                        "wc2.1_30s_tavg_09" = 9,
-                        "wc2.1_30s_tavg_10" = 10,
-                        "wc2.1_30s_tavg_11" = 11,
-                        "wc2.1_30s_tavg_12" = 12)) 
+  WC12 <- raster(paste0(localdir, "/wc2.1_30s_tavg_12.tif"))
+  wc12 <- raster::extract(WC12, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
 
-####
-#precip
-#####
-
-preWC1 <- raster(paste0(localdir, '/wc2.1_30s_prec_01.tif'))
-prewc1 <- raster::extract(preWC1, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC2 <- raster(paste0(localdir, '/wc2.1_30s_prec_02.tif'))
-prewc2 <- raster::extract(preWC2, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC3 <- raster(paste0(localdir, '/wc2.1_30s_prec_03.tif'))
-prewc3 <- raster::extract(preWC3, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC4 <- raster(paste0(localdir, '/wc2.1_30s_prec_04.tif'))
-prewc4 <- raster::extract(preWC4, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC5 <- raster(paste0(localdir, '/wc2.1_30s_prec_05.tif'))
-prewc5 <- raster::extract(preWC5, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC6 <- raster(paste0(localdir, '/wc2.1_30s_prec_06.tif'))
-prewc6 <- raster::extract(preWC6, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC7 <- raster(paste0(localdir, '/wc2.1_30s_prec_07.tif'))
-prewc7 <- raster::extract(preWC7, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC8 <- raster(paste0(localdir, '/wc2.1_30s_prec_08.tif'))
-prewc8 <- raster::extract(preWC8, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC9 <- raster(paste0(localdir, '/wc2.1_30s_prec_09.tif'))
-prewc9 <- raster::extract(preWC9, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC10 <- raster(paste0(localdir, '/wc2.1_30s_prec_10.tif'))
-prewc10 <- raster::extract(preWC10, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC11 <- raster(paste0(localdir, '/wc2.1_30s_prec_11.tif'))
-prewc11 <- raster::extract(preWC11, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
-
-preWC12 <- raster(paste0(localdir, '/wc2.1_30s_prec_12.tif'))
-prewc12 <- raster::extract(preWC12, sites_nutnet_sp2, fun = max, df = TRUE) %>% 
-  mutate(sitename = sites_nutnet_sp2$site_code)
+  AvgClimate <- full_join(wc1, wc2, by = c("ID", "sitename")) %>%
+    full_join(wc3, by = c("ID", "sitename")) %>%
+    full_join(wc4, by = c("ID", "sitename")) %>%
+    full_join(wc5, by = c("ID", "sitename")) %>%
+    full_join(wc6, by = c("ID", "sitename")) %>%
+    full_join(wc7, by = c("ID", "sitename")) %>%
+    full_join(wc8, by = c("ID", "sitename")) %>%
+    full_join(wc9, by = c("ID", "sitename")) %>%
+    full_join(wc10, by = c("ID", "sitename")) %>%
+    full_join(wc11, by = c("ID", "sitename")) %>%
+    full_join(wc12, by = c("ID", "sitename")) %>%
+    gather(Month, AvgTempLTA, -ID, -sitename) %>%
+    mutate(Month = recode(Month,
+      "wc2.1_30s_tavg_01" = 1,
+      "wc2.1_30s_tavg_02" = 2,
+      "wc2.1_30s_tavg_03" = 3,
+      "wc2.1_30s_tavg_04" = 4,
+      "wc2.1_30s_tavg_05" = 5,
+      "wc2.1_30s_tavg_06" = 6,
+      "wc2.1_30s_tavg_07" = 7,
+      "wc2.1_30s_tavg_08" = 8,
+      "wc2.1_30s_tavg_09" = 9,
+      "wc2.1_30s_tavg_10" = 10,
+      "wc2.1_30s_tavg_11" = 11,
+      "wc2.1_30s_tavg_12" = 12
+    ))
 
 
-AvgClimatePrecip <- full_join(prewc1, prewc2, by = c("ID", "sitename")) %>%
-  full_join(prewc3, by = c("ID", "sitename")) %>%
-  full_join(prewc4, by = c("ID", "sitename")) %>%
-  full_join(prewc5, by = c("ID", "sitename")) %>%
-  full_join(prewc6, by = c("ID", "sitename")) %>%
-  full_join(prewc7, by = c("ID", "sitename")) %>%
-  full_join(prewc8, by = c("ID", "sitename")) %>%
-  full_join(prewc9, by = c("ID", "sitename")) %>%
-  full_join(prewc10, by = c("ID", "sitename")) %>%
-  full_join(prewc11, by = c("ID", "sitename")) %>%
-  full_join(prewc12, by = c("ID", "sitename"))  %>%
-  gather(Month, AvgPrecipLTA, -ID, -sitename) %>%
-  mutate(Month = recode(Month, "wc2.1_30s_prec_01" = 1,
-                        "wc2.1_30s_prec_02" = 2, 
-                        "wc2.1_30s_prec_03" = 3,
-                        "wc2.1_30s_prec_04" = 4, 
-                        "wc2.1_30s_prec_05" = 5,
-                        "wc2.1_30s_prec_06" = 6,
-                        "wc2.1_30s_prec_07" = 7, 
-                        "wc2.1_30s_prec_08" = 8, 
-                        "wc2.1_30s_prec_09" = 9,
-                        "wc2.1_30s_prec_10" = 10,
-                        "wc2.1_30s_prec_11" = 11,
-                        "wc2.1_30s_prec_12" = 12)) 
+  ####
+  # precip
+  #####
+
+  preWC1 <- raster(paste0(localdir, "/wc2.1_30s_prec_01.tif"))
+  prewc1 <- raster::extract(preWC1, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC2 <- raster(paste0(localdir, "/wc2.1_30s_prec_02.tif"))
+  prewc2 <- raster::extract(preWC2, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC3 <- raster(paste0(localdir, "/wc2.1_30s_prec_03.tif"))
+  prewc3 <- raster::extract(preWC3, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC4 <- raster(paste0(localdir, "/wc2.1_30s_prec_04.tif"))
+  prewc4 <- raster::extract(preWC4, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC5 <- raster(paste0(localdir, "/wc2.1_30s_prec_05.tif"))
+  prewc5 <- raster::extract(preWC5, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC6 <- raster(paste0(localdir, "/wc2.1_30s_prec_06.tif"))
+  prewc6 <- raster::extract(preWC6, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC7 <- raster(paste0(localdir, "/wc2.1_30s_prec_07.tif"))
+  prewc7 <- raster::extract(preWC7, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC8 <- raster(paste0(localdir, "/wc2.1_30s_prec_08.tif"))
+  prewc8 <- raster::extract(preWC8, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC9 <- raster(paste0(localdir, "/wc2.1_30s_prec_09.tif"))
+  prewc9 <- raster::extract(preWC9, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC10 <- raster(paste0(localdir, "/wc2.1_30s_prec_10.tif"))
+  prewc10 <- raster::extract(preWC10, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC11 <- raster(paste0(localdir, "/wc2.1_30s_prec_11.tif"))
+  prewc11 <- raster::extract(preWC11, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
+
+  preWC12 <- raster(paste0(localdir, "/wc2.1_30s_prec_12.tif"))
+  prewc12 <- raster::extract(preWC12, sites_nutnet_sp2, fun = max, df = TRUE) %>%
+    mutate(sitename = sites_nutnet_sp2$site_code)
 
 
-longterm_climate <- full_join(AvgClimate, AvgClimatePrecip)
+  AvgClimatePrecip <- full_join(prewc1, prewc2, by = c("ID", "sitename")) %>%
+    full_join(prewc3, by = c("ID", "sitename")) %>%
+    full_join(prewc4, by = c("ID", "sitename")) %>%
+    full_join(prewc5, by = c("ID", "sitename")) %>%
+    full_join(prewc6, by = c("ID", "sitename")) %>%
+    full_join(prewc7, by = c("ID", "sitename")) %>%
+    full_join(prewc8, by = c("ID", "sitename")) %>%
+    full_join(prewc9, by = c("ID", "sitename")) %>%
+    full_join(prewc10, by = c("ID", "sitename")) %>%
+    full_join(prewc11, by = c("ID", "sitename")) %>%
+    full_join(prewc12, by = c("ID", "sitename")) %>%
+    gather(Month, AvgPrecipLTA, -ID, -sitename) %>%
+    mutate(Month = recode(Month,
+      "wc2.1_30s_prec_01" = 1,
+      "wc2.1_30s_prec_02" = 2,
+      "wc2.1_30s_prec_03" = 3,
+      "wc2.1_30s_prec_04" = 4,
+      "wc2.1_30s_prec_05" = 5,
+      "wc2.1_30s_prec_06" = 6,
+      "wc2.1_30s_prec_07" = 7,
+      "wc2.1_30s_prec_08" = 8,
+      "wc2.1_30s_prec_09" = 9,
+      "wc2.1_30s_prec_10" = 10,
+      "wc2.1_30s_prec_11" = 11,
+      "wc2.1_30s_prec_12" = 12
+    ))
 
-write.csv(
-  longterm_climate,
-  './data/weather/longterm_avgclimate.csv',
-  row.names = F
-)
 
-} else print("not processing raw CLIMATE data")
+  longterm_climate <- full_join(AvgClimate, AvgClimatePrecip)
 
+  write.csv(
+    longterm_climate,
+    "./data/weather/longterm_avgclimate.csv",
+    row.names = F
+  )
+} else {
+  print("not processing raw CLIMATE data")
+}
 
 ```
 
@@ -338,13 +353,13 @@ A plot illustrate a problem here (with an easy solution). At Cowichan there are 
 worldclim <- read_csv("./data/weather/longterm_avgclimate.csv")
 montlycru <- read_csv("./data/weather/monthlyweather.csv")
 
-#ceda precip in mm/month
-#world clim is also in mm/month
-ClimChange_wc <- montlycru %>% 
+# ceda precip in mm/month
+# world clim is also in mm/month
+ClimChange_wc <- montlycru %>%
   full_join(worldclim) %>%
   mutate(TempDifference = tmp_degrees_Celsius - AvgTempLTA) %>%
   mutate(PrecipDifference = `pre_mm/month` - AvgPrecipLTA) %>%
-  separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
+  separate(sitename, into = c("site", "b"), sep = "[.]") %>%
   dplyr::select(-b)
 
 # ClimChange_wc %>% filter(site=="sval") %>%
@@ -358,14 +373,15 @@ ClimChange_wc <- montlycru %>%
 #   scale_x_date(limits = c(ymd("1984-01-01"), ymd("2020-01-01")), date_breaks = "10 years", date_labels = "%Y") +
 #   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ClimChange_wc %>% filter(site=="cowi") %>%
-  ggplot(aes(x=plotdate, y=PrecipDifference))+
-  geom_point()+
-  geom_smooth(method = "lm")+
-  facet_wrap(~Month)+
-  labs(y = "Anomaly from 1970-2000, mm", x = "Year", title = "Precip Anomalies, Cowichan")+
-  theme_cowplot()+
-  geom_hline(yintercept = 0)+
+ClimChange_wc %>%
+  filter(site == "cowi") %>%
+  ggplot(aes(x = plotdate, y = PrecipDifference)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~Month) +
+  labs(y = "Anomaly from 1970-2000, mm", x = "Year", title = "Precip Anomalies, Cowichan") +
+  theme_cowplot() +
+  geom_hline(yintercept = 0) +
   scale_x_date(limits = c(ymd("1984-01-01"), ymd("2020-01-01")), date_breaks = "10 years", date_labels = "%Y") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
@@ -378,17 +394,19 @@ Indeed, using CEDA data to calculate averages as well as anomolies proves to be 
 # min(montlycru$plotdate)
 # max(montlycru$plotdate)
 
-cruavg <- montlycru %>% 
+cruavg <- montlycru %>%
   group_by(sitename, Month) %>%
-  summarise(avg_precip = mean(`pre_mm/month`, na.rm = T),
-         avg_temp = mean(`tmp_degrees_Celsius`, na.rm = T), 
-         N = n())
+  summarise(
+    avg_precip = mean(`pre_mm/month`, na.rm = T),
+    avg_temp = mean(`tmp_degrees_Celsius`, na.rm = T),
+    N = n()
+  )
 
 ClimChange <- montlycru %>%
   full_join(cruavg) %>%
   mutate(TempDifference = tmp_degrees_Celsius - avg_temp) %>%
   mutate(PrecipDifference = `pre_mm/month` - avg_precip) %>%
-  separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
+  separate(sitename, into = c("site", "b"), sep = "[.]") %>%
   dplyr::select(-b)
 
 # ClimChange %>% filter(site=="sval") %>%
@@ -402,14 +420,15 @@ ClimChange <- montlycru %>%
 #   scale_x_date(limits = c(ymd("1984-01-01"), ymd("2020-01-01")), date_breaks = "10 years", date_labels = "%Y") +
 #   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ClimChange %>% filter(site=="cowi") %>%
-  ggplot(aes(x=plotdate, y=PrecipDifference))+
-  geom_point()+
-  geom_smooth(method = "lm")+
-  facet_wrap(~Month)+
-  labs(y = "Anomaly from 39 yrs CEDA data, mm", x = "Year", title = "Precip Anomalies, Cowichan")+
-  theme_cowplot()+
-  geom_hline(yintercept = 0)+
+ClimChange %>%
+  filter(site == "cowi") %>%
+  ggplot(aes(x = plotdate, y = PrecipDifference)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~Month) +
+  labs(y = "Anomaly from 39 yrs CEDA data, mm", x = "Year", title = "Precip Anomalies, Cowichan") +
+  theme_cowplot() +
+  geom_hline(yintercept = 0) +
   scale_x_date(limits = c(ymd("1984-01-01"), ymd("2020-01-01")), date_breaks = "10 years", date_labels = "%Y") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
@@ -424,7 +443,7 @@ Additionally, note that the new data in the NutNet dropbox allows us to better l
 # ndep <- raster(paste0(localdir, '/N-deposition1993.tif'),
 #                crs = '+init=EPSG:4326')
 # crs(ndep) <- CRS('+init=EPSG:4326') #https://epsg.io/4326
-# 
+#
 # ndep_merge <- raster::extract(ndep, sites_nutnet_sp2, fun = max, df = TRUE) %>%
 #   mutate(sitename = sites_nutnet_sp2$site_code) %>%
 #   separate(sitename, into = c('site', 'b'), sep = "[.]") %>%
@@ -436,9 +455,11 @@ ndep <- read_csv(paste0(dropboxdir, "/site-n-deposition-07-December-2020.csv")) 
   filter(year == 1984 | year == 2016) %>%
   pivot_wider(names_from = year, values_from = total_deposition) %>%
   mutate(ndep_change_2016_1984 = `2016` - `1984`) %>%
-  rename(ndep_2016 = `2016`,
-         ndep_1984 = `1984`) %>%
-  separate(site_code, into = c('site', 'b'), sep = "[.]") %>%
+  rename(
+    ndep_2016 = `2016`,
+    ndep_1984 = `1984`
+  ) %>%
+  separate(site_code, into = c("site", "b"), sep = "[.]") %>%
   dplyr::select(-b)
 
 ```
@@ -448,48 +469,53 @@ ndep <- read_csv(paste0(dropboxdir, "/site-n-deposition-07-December-2020.csv")) 
 Connect to the NutNet Dropbox, and go from there. 
 
 ```{r siteinfo, echo=F, message=F, warning=F}
-dropbox <- read_csv(paste0(dropboxdir, '/comb-by-plot-clim-soil-diversity-07-December-2020.csv'), 
-                    col_types = cols(),
-                    na = c("NULL", "NA"))
+dropbox <- read_csv(paste0(dropboxdir, "/comb-by-plot-clim-soil-diversity-07-December-2020.csv"),
+  col_types = cols(),
+  na = c("NULL", "NA")
+)
 
-siteclim<- dropbox %>%
+siteclim <- dropbox %>%
   filter(trt == "Control") %>%
-  separate(site_code, into = c('site', 'country'), sep='[.]') %>%
+  separate(site_code, into = c("site", "country"), sep = "[.]") %>%
   group_by(site) %>%
-  summarise(Managed = mean(managed), #sdManaged = sd(managed),
-            Burned = mean(burned), #sdBurned=sd(burned),
-            Elevation = mean(elevation), #sdElevation=sd(elevation),
-            RainMAP = mean(MAP_v2, na.rm=T), #sdRainPET=sd(MAP_v2, na.rm=T),
-            TempMAT = mean(MAT_v2), #sdTempMAT = sd(MAT_v2),
-            Richness = mean(site_richness),#, sdRichness = sd(site_richness))
-            NativeRichness = mean(site_native_richness),
-            IntRichness = mean(site_introduced_richness),
-            FractionExotic = (IntRichness/(NativeRichness+IntRichness)),
-            SoilC = mean(pct_C, na.rm = T),
-            SoilN = mean(pct_N, na.rm = T),
-            SoilP = mean(ppm_P, na.rm = T), 
-            SoilK = mean(ppm_K, na.rm = T)) %>%
+  summarise(
+    Managed = mean(managed), # sdManaged = sd(managed),
+    Burned = mean(burned), # sdBurned=sd(burned),
+    Elevation = mean(elevation), # sdElevation=sd(elevation),
+    RainMAP = mean(MAP_v2, na.rm = T), # sdRainPET=sd(MAP_v2, na.rm=T),
+    TempMAT = mean(MAT_v2), # sdTempMAT = sd(MAT_v2),
+    Richness = mean(site_richness), # , sdRichness = sd(site_richness))
+    NativeRichness = mean(site_native_richness),
+    IntRichness = mean(site_introduced_richness),
+    FractionExotic = (IntRichness / (NativeRichness + IntRichness)),
+    SoilC = mean(pct_C, na.rm = T),
+    SoilN = mean(pct_N, na.rm = T),
+    SoilP = mean(ppm_P, na.rm = T),
+    SoilK = mean(ppm_K, na.rm = T)
+  ) %>%
   filter(!is.na(Richness))
 
 
 obsyr_even <- dropbox %>%
   filter((year == (first_nutrient_year - 1)) | experiment_type == "Observational") %>%
-  group_by(site_code) %>%  #filter(site_code == "lagoas.br")
-  summarise(ObsYrMeanEven = mean(evenness, na.rm = T),
-            ObsYrMeanInvSimp = mean(inverse_simpson, na.rm = T)) %>%
-    separate(site_code, into = c('site', 'country'), sep='[.]') %>% 
+  group_by(site_code) %>% # filter(site_code == "lagoas.br")
+  summarise(
+    ObsYrMeanEven = mean(evenness, na.rm = T),
+    ObsYrMeanInvSimp = mean(inverse_simpson, na.rm = T)
+  ) %>%
+  separate(site_code, into = c("site", "country"), sep = "[.]") %>%
   dplyr::select(-country)
 
 # obsyr_even %>%
-#   ggplot(aes(x = ObsYrMeanEven, y = ObsYrMeanInvSimp)) + 
+#   ggplot(aes(x = ObsYrMeanEven, y = ObsYrMeanInvSimp)) +
 #   geom_point()
-  
+
 region <- dropbox %>%
-  separate(site_code, into = c('site', 'country'), sep='[.]') %>% 
+  separate(site_code, into = c("site", "country"), sep = "[.]") %>%
   dplyr::select(site, continent, habitat, latitude, longitude)
 
-SiteInfo <- ndep %>% 
-  left_join(region) %>% 
+SiteInfo <- ndep %>%
+  left_join(region) %>%
   inner_join(siteclim) %>%
   left_join(obsyr_even)
 
@@ -500,15 +526,19 @@ SiteInfo <- ndep %>%
 ###
 # Site biomass
 ###
-yrprod1<- dropbox %>%
-  separate(site_code, into = c('site', 'country'), sep = '[.]') %>%
-  filter(trt == "Control") %>% 
+yrprod1 <- dropbox %>%
+  separate(site_code, into = c("site", "country"), sep = "[.]") %>%
+  filter(trt == "Control") %>%
   group_by(site, year) %>%
-  summarise(ANPP = mean(live_mass, na.rm = T),
-            sdANPP = sd(live_mass, na.rm = T)) %>%
-  rename(gs = year) %>% filter(!is.na(sdANPP))
+  summarise(
+    ANPP = mean(live_mass, na.rm = T),
+    sdANPP = sd(live_mass, na.rm = T)
+  ) %>%
+  rename(gs = year) %>%
+  filter(!is.na(sdANPP))
 
-yrprod <- yrprod1 %>% group_by(site) %>%
+yrprod <- yrprod1 %>%
+  group_by(site) %>%
   summarise(YrsBiomass = n()) %>%
   left_join(yrprod1)
 
@@ -1162,8 +1192,7 @@ Going thru the setps in more detail:
 1) Create functions to convert linear (julian) calendar days into radian (circular) data. (becuase southern hemisphere/mediterranean sites which green up on, say julian day 365 on average...but if one year greens up on julian day 1, this is a 1 day difference NOT a -365 day difference)
 
 ```{r radianfxn echo=F}
-circmean_degrees <- function (x)
-{
+circmean_degrees <- function(x) {
   x_radians <- x * pi / 180
   sinr <- sum(sin(x_radians))
   cosr <- sum(cos(x_radians))
@@ -1172,8 +1201,7 @@ circmean_degrees <- function (x)
   circmean_degree
 }
 
-circ_degrees <- function (x)
-{
+circ_degrees <- function(x) {
   x_radians <- x * pi / 180
   sinr <- (sin(x_radians))
   cosr <- (cos(x_radians))
@@ -1183,34 +1211,264 @@ circ_degrees <- function (x)
 }
 ```
 
-2) Actually convert linear calendar years into circular data. Also filter the Landsat data to include only pixels identified as being "clear" or "snow" covered. Also we set the minimum NDVI to 0. 
+2) Filter the Landsat data to include only pixels identified as being "clear" or "snow" covered. **NOTE** This should probably be double checked, I started off very conservatively when deciding to include tier 2 data. Documentation could have been much more through, so it would be good to see if there are some additional data which should be included/excluded. 
+
+Also we set the minimum NDVI to 0 to assist in the spline fitting. 
 
 ```{r readinphenodata, eval = T, echo = F, message = F, warning = F}
-pheno_path <- paste0(localdir, "/annoying manual")   # path to the data
-pheno_files <- dir(pheno_path, pattern = "*.csv") # get file names
-pheno_files_all <- tibble(filename = pheno_files) %>%
-  mutate(file_contents = map(filename,
-                             ~ read_csv(file.path(pheno_path, .),
-                                        skip = 2,  col_type = cols(), col_names = FALSE)))   %>%
-  unnest() %>%
-  rename(row = X1, id = X2, longitude = X3, latitude = X4, NDVI = X5, BQA = X6, geo = X7) %>%
-  select(-row, -geo) %>%
-  filter(!is.na(NDVI), !is.na(BQA)) %>%
-  separate(filename, sep = "_", into = c("site", "country", "ls", "tier")) %>%
-  separate(id, sep="_", into = c('landsat', 'path', 'date')) %>% 
-  mutate(Date = ymd(date)) 
 
-intp <- read_csv('./interpretation.csv', col_types = cols())
+if (process_raw_ndvi == TRUE) {
+  pheno_path <- paste0(localdir, "/landsat") # path to the data
+  pheno_files <- dir(pheno_path, pattern = "*.csv") # get file names
+  pheno_files_all <- tibble(filename = pheno_files) %>%
+    mutate(file_contents = map(
+      filename,
+      ~ read_csv(file.path(pheno_path, .),
+        skip = 2, col_type = cols(), col_names = FALSE
+      )
+    )) %>%
+    unnest() %>%
+    rename(row = X1, id = X2, longitude = X3, latitude = X4, NDVI = X5, BQA = X6, geo = X7) %>%
+    filter(!is.na(NDVI), !is.na(BQA)) %>%
+    separate(filename, sep = "_", into = c("site", "country", "ls", "tier")) %>%
+    separate(id, sep = "_", into = c("landsat", "path", "date")) %>%
+    mutate(tier = case_when(
+      tier == "t1.csv" ~ 1,
+      tier == "t2.csv" ~ 2
+    )) %>%
+    dplyr::select(-row, -geo) %>%
+    mutate(Date = ymd(date))
 
-pheno_data <- pheno_files_all %>% 
-  full_join(intp) %>%
-  filter(remove=='keep') %>%
-  filter(!is.na(NDVI), !is.na(BQA)) %>%
-  group_by(site, Date) %>%
-  summarise(NDVI = mean(NDVI)) %>%
-  mutate(NDVI = ifelse(NDVI < 0, 0, NDVI)) %>%
-  arrange(site, Date) 
+  # landsat_codes2 <- read_csv(paste0(localdir, '/landsat_interpretation.csv'), col_types = cols())
+  landsat_codes <- read_csv(paste0(localdir, "/landsat_band_interpretation.csv"), col_types = cols())
+
+  pheno_data <- pheno_files_all %>%
+    full_join(landsat_codes) %>%
+    filter(action == "keep") %>% # remove=='keep') %>%
+    filter(!is.na(NDVI), !is.na(BQA)) %>%
+    group_by(site, Date) %>%
+    summarise(NDVI = mean(NDVI)) %>%
+    mutate(NDVI = if_else(NDVI < 0, 0, NDVI)) %>%
+    arrange(site, Date)
+} else {
+  print("not processing raw NDVI data")
+}
 ```
+
+3) 
+* Convert linear calendar years into circular data. 
+* Then need to identify the average trough date
+* A "growing season" or "phenological year" is subsequently identified as the 365 days following the "trough date" plus an GSType 90 day buffer on either end. So a total of 90 + 365 + 90 days. I know this is not totally right since leap years are confusing. 
+* And then take the Landsat readings and duplicate the readings that fall within the "shoulder season". So that we have the total, long data set of all NDVI readings
+* We also assign a green-up critera, which is the 50% of the average range of NDVI at each site ((avg max - avg min * 50) + avg min). This green-up threshold is constant at all years within a site. 
+
+```{r getShoulderSeasonsTroughs, eval = T, echo = F, message = F, warning = F}
+if (process_raw_ndvi == TRUE) {
+
+  # first need to fit a single cubic spline to all data, and then get the average date which has the minimum NDVI
+  min_ndvi_name <- levels(as.factor(pheno_data$site)) %>%
+    tibble() %>%
+    rename(site = ".") %>%
+    mutate(sitenum = seq(1:nrow(.)))
+
+  ndviemptydataframe <- tibble(
+    x = numeric(),
+    ndvi = numeric(),
+    sitenum = numeric(0)
+  )
+
+  min_ndvi <- ndviemptydataframe
+  for (i in c(1:nrow(min_ndvi_name))) {
+    b <- i
+    plot.filter <- (min_ndvi_name %>% full_join(pheno_data, by = "site")) %>% filter(sitenum == b)
+    spline <- smooth.spline(x = plot.filter$Date, y = plot.filter$NDVI)
+    ndvi <- as_tibble(predict(spline, as.numeric(ymd(min(plot.filter$Date))):as.numeric(ymd(max(plot.filter$Date))), deriv = 0)) %>%
+      rename(ndvi = y) %>%
+      mutate(
+        Date = as_date(x),
+        sitenum = b
+      )
+    min_ndvi <- bind_rows(min_ndvi, ndvi)
+  }
+
+  min_ndvifitted <- full_join(min_ndvi, min_ndvi_name)
+
+  siteinfo <- min_ndvifitted %>%
+    mutate(Year = year(Date)) %>%
+    group_by(site, Year) %>%
+    summarise(ndvi_min = min(ndvi), ndvi_max = max(ndvi)) %>%
+    rename(ndvi = ndvi_min) %>%
+    mutate(DaysInYear = if_else(leap_year(Year) == "TRUE", 366, 365)) %>%
+    left_join((min_ndvifitted %>%
+      mutate(Year = year(Date)))) %>%
+    mutate(Julian = yday(Date)) %>%
+    mutate(DegreeJulian = Julian / DaysInYear * 360) %>%
+    group_by(site) %>%
+    summarise(
+      TroughDateRadian = circmean_degrees(DegreeJulian),
+      avg_ndvi_max = mean(ndvi_max)
+    ) %>%
+    mutate(
+      TroughDate = TroughDateRadian * 365 / 360,
+      MinDate = (as_date(TroughDate)),
+      Start = yday(MinDate),
+      End = yday(MinDate) - 1
+    ) %>%
+    dplyr::select(-TroughDate, -MinDate, -avg_ndvi_max) %>%
+    full_join(min_ndvi_name)
+
+  pheno_data_all_1 <- full_join(pheno_data, siteinfo)
+
+  # assign growing season
+  GSmain <- siteinfo %>%
+    full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
+    mutate(
+      startyr = if_else(Start > 182, year - 1, (year)),
+      normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
+      normalstart = ymd(normalstart),
+      normalend = normalstart + 364,
+      earlystart = normalstart - 90,
+      lateend = normalend + 90
+    ) %>%
+    dplyr::select(site, normalstart, normalend, year) %>%
+    mutate(ID = paste(site, year, sep = "_")) %>%
+    dplyr::select(-site, -year) %>%
+    gather(var, Date, -ID) %>%
+    group_by(ID) %>%
+    distinct() %>%
+    complete(Date = seq.Date(min(Date), max(Date), by = "day")) %>%
+    dplyr::select(-var) %>%
+    separate(ID, into = c("site", "GrowingSeason"), sep = "_") %>%
+    mutate(
+      GSType = "mainGS",
+      GrowingSeason = as.numeric(GrowingSeason),
+      weights = 999
+    )
+
+  # add 90 days pre/post growing season
+  GSearly <- siteinfo %>%
+    full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
+    mutate(
+      startyr = if_else(Start > 182, year - 1, (year)),
+      normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
+      normalstart = ymd(normalstart),
+      normalend = normalstart + 364,
+      earlystart = normalstart - 90,
+      lateend = normalend + 90
+    ) %>%
+    dplyr::select(site, normalstart, earlystart, year) %>%
+    mutate(ID = paste(site, year, sep = "_")) %>%
+    dplyr::select(-site, -year) %>%
+    gather(var, Date, -ID) %>%
+    group_by(ID) %>%
+    distinct() %>%
+    complete(Date = seq.Date(min(Date), max(Date), by = "day")) %>%
+    dplyr::select(-var) %>%
+    separate(ID, into = c("site", "GrowingSeason"), sep = "_") %>%
+    mutate(
+      GSType = "earlyGS",
+      GrowingSeason = as.numeric(GrowingSeason),
+      weights = 0.5
+    ) %>%
+    arrange(site, GrowingSeason, Date)
+
+  GSlate <- siteinfo %>%
+    full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
+    mutate(
+      startyr = if_else(Start > 182, year - 1, (year)),
+      normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
+      normalstart = ymd(normalstart),
+      normalend = normalstart + 365,
+      earlystart = normalstart - 90,
+      lateend = normalend + 90
+    ) %>%
+    dplyr::select(site, normalend, lateend, year) %>%
+    gather(var, Date, -site, -year) %>%
+    arrange(site, year, Date) %>%
+    mutate(ID = paste(site, year, sep = "_")) %>%
+    dplyr::select(-site, -year) %>%
+    group_by(ID) %>%
+    distinct() %>%
+    complete(Date = seq.Date((min(Date)), max(Date), by = "day")) %>%
+    dplyr::select(-var) %>%
+    separate(ID, into = c("site", "GrowingSeason"), sep = "_") %>%
+    mutate(
+      GSType = "lateGS",
+      GrowingSeason = as.numeric(GrowingSeason),
+      weights = 0.5
+    ) %>%
+    arrange(site, GrowingSeason, Date)
+
+  GScutoffs <- siteinfo %>%
+    full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
+    mutate(
+      startyr = if_else(Start > 182, year - 1, (year)),
+      normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
+      normalstart = ymd(normalstart),
+      normalend = normalstart + 364,
+      earlystart = normalstart - 90,
+      lateend = normalend + 90
+    ) %>%
+    dplyr::select(site, normalstart, normalend, year) %>%
+    rename(GrowingSeason = year)
+
+  pheno_early <- inner_join(GSearly, pheno_data_all_1)
+  pheno_late <- GSlate %>% inner_join(pheno_data_all_1)
+  pheno_normal <- GSmain %>% right_join(pheno_data_all_1)
+
+  # so this is the final data, with duped early/late growing season
+  pheno_data_all_2 <- bind_rows(pheno_early, pheno_late) %>%
+    bind_rows(pheno_normal) %>%
+    left_join(GScutoffs) %>%
+    arrange(site, GrowingSeason, Date)
+
+  siteinfo2 <- filter(pheno_data_all_2, GSType == "mainGS") %>%
+    group_by(site, GrowingSeason) %>%
+    summarise(
+      MIN = min(NDVI),
+      MAX = max(NDVI)
+    ) %>%
+    group_by(site) %>%
+    summarise(
+      avg_ndvi_min = mean(MIN),
+      avg_ndvi_max = mean(MAX)
+    ) %>%
+    mutate(Max50 = (.5 * (avg_ndvi_max - avg_ndvi_min) + avg_ndvi_min)) %>%
+    full_join(siteinfo)
+
+  # to weight by max NDVI
+  pheno_data_all <- pheno_normal %>%
+    group_by(site, GrowingSeason) %>%
+    summarise(
+      N = n(),
+      MAXNDVI = max(NDVI),
+      MINNDVI = min(NDVI)
+    ) %>%
+    full_join(pheno_data_all_2) %>%
+    mutate(weights = if_else((NDVI == MAXNDVI & weights == 999), 1, .5))
+  
+  write.csv(pheno_data_all, "pheno_data_all.csv")
+  
+} else {
+  print("not processing raw NDVI data")
+}
+
+pheno_data_all <- read_csv("./pheno_data_all.csv")
+
+kable(pheno_data_all %>% group_by(site) %>%
+  summarise(
+    `Start Date` = min(Date),
+    `End Date` = max(Date),
+    `N images (w/ shoulders)` = n(),
+    `Site number` = mean(sitenum),
+    `Julian GS start date` = mean(Start)
+  ) %>%
+  full_join(siteinfo2) %>%
+  rename(`NDVI Green-up threshold` = Max50) %>%
+  dplyr::select(`Site number`, site, `Start Date`, `End Date`, `Julian GS start date`, `NDVI Green-up threshold`, `N images (w/ shoulders)`)) %>%
+  kable_styling("striped", full_width = F)
+```
+
 
 
 
