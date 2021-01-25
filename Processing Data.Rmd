@@ -15,6 +15,7 @@ always_allow_html: true
 
 ```{r packages, include=F, echo=F, message=F}
 library("sf")
+library("car")
 library("rnaturalearth")
 library("cowplot")
 library("lubridate")
@@ -1851,6 +1852,304 @@ grow = 1980
 
 ```
 
+
+# Filter sites with <10 years of NDVI data
+
+Given that we are looking at long-term trends, it doesn't make much sense to include sites which only have a minimal amount of years were we could extract meaninfulphenological dates. Reasons that sites might not have enough years include: satellites had poor coverage of location (esp true in earlier landsats), too much cloud cover (and thus couldn't fit a nice trend/too few images during growing season), site never "greened-up" threshold during a given year (important esp for Mediterranean sites, and probably other reasons.
+
+```{r filtershorttermsites, echo=F, message=F, warning=F}
+longtermsites <- NutNetPheno_wide %>%
+  filter(!is.na(GSLength)) %>%
+  group_by(site) %>%
+  summarise(N = n()) %>%
+  filter(N>=10) %>%
+  select(-N) %>%
+  filter(site %in% SiteInfo$site) %>%
+  inner_join(NutNetPheno_long %>%
+               group_by(site) %>%
+               summarise(sitenum = mean(sitenum)))
+write_csv(longtermsites, './longtermsites.csv')
+
+levels(as.factor(longtermsites$site))
+```
+
+# Start to merge climate data with phenology data
+* The goal is to recognize that some area have bigger temp anomolies, has their phenology/productivity changed more?
+  + We can look weather windows BEFORE/during the typical green-up month (1, 2, 3, 4 mos)
+  + And also do weather windows around the typical date of NDVI max (in both directions, 1 month window, 3 mo, 5, 7, 9 --> essentially a growing season)
+
+```{r temptrends, eval = T, echo = F, message = F, warning = F}
+###
+# Must make full df with all possible climate change dates (1984 - 2019 growing seasons)
+####
+CLIMYRS <- tibble(gs = rep(c(1984:2019), nrow(longtermsites)),
+       site = rep(longtermsites$site, each = (2019-1983)))
+
+CLIMYRS_ALL <- NutNetPheno_wide %>%
+  group_by(site) %>% summarise(gs = min(gs)) %>%
+  left_join(NutNetPheno_wide %>% select(site, gs, SOStypicaldate, MAXtypicaldate, EOStypicaldate)) %>%
+  mutate(typicalGSL = EOStypicaldate - SOStypicaldate) %>%
+  dplyr::select(-EOStypicaldate) %>%
+  mutate(SOStypicalDAY = day(SOStypicaldate),
+         SOStypicalMONTH = month(SOStypicaldate),
+         MAXtypicalDAY = day(MAXtypicaldate),
+         MAXtypicalMONTH = month(MAXtypicaldate),
+         SOStypicalYEAR = ifelse(year(SOStypicaldate)==gs, "GS", 
+                                 ifelse(year(SOStypicaldate) == (gs-1), "GS-1", NA)),
+         MAXtypicalYEAR = ifelse(year(MAXtypicaldate)==gs, "GS",
+                                 ifelse(year(MAXtypicaldate) == (gs - 1), "GS-1", NA))) %>%
+  dplyr::select(-gs, -SOStypicaldate, -MAXtypicaldate) %>%
+  full_join(CLIMYRS) %>%
+  mutate(TYPICALSOS = ymd(paste(ifelse(SOStypicalYEAR == "GS", gs, 
+                                       ifelse(SOStypicalYEAR == "GS-1", (gs - 1), NA)), SOStypicalMONTH, SOStypicalDAY, sep = "-")),
+         TYPICALMAX = ymd(paste(ifelse(MAXtypicalYEAR == "GS", gs, 
+                                      ifelse(MAXtypicalYEAR == "GS-1", (gs - 1), NA)), MAXtypicalMONTH, MAXtypicalDAY, sep = "-"))) %>%
+  select(site, gs, TYPICALSOS, TYPICALMAX, typicalGSL) 
+
+#####
+# Window around SOS date, preceding only
+#####
+#MONTH
+clim_month_soswindow <- CLIMYRS_ALL %>% 
+  select(site, gs, TYPICALSOS) %>%
+  mutate(SOS_typical = month(TYPICALSOS),
+         SOS_typical_sub1  = month(TYPICALSOS - 30),
+         SOS_typical_sub2  = month(TYPICALSOS - 60),
+         SOS_typical_sub3  = month(TYPICALSOS - 90),
+         SOS_typical_sub4  = month(TYPICALSOS - 120)) %>%
+  gather(-site, -gs, -TYPICALSOS, key = "TYPE", value = "MONTH")
+#YEAR
+clim_year_soswindow <- CLIMYRS_ALL %>% 
+  select(site, gs, TYPICALSOS) %>%
+  mutate(SOS_typical = year(TYPICALSOS),
+         SOS_typical_sub1 = year(TYPICALSOS - 30),
+         SOS_typical_sub2 = year(TYPICALSOS - 60),
+         SOS_typical_sub3 = year(TYPICALSOS - 90),
+         SOS_typical_sub4 = year(TYPICALSOS - 120))  %>%
+  gather(-site, -gs, -TYPICALSOS, key = "TYPE", value = "YEAR")
+
+ee_clim_soswindow <- full_join(clim_month_soswindow, clim_year_soswindow) %>%
+  left_join(ClimChange %>%
+            mutate(MONTH = month(plotdate),
+                   YEAR = year(plotdate))) %>%
+  select(site, gs, TYPE, TempDifference) %>%
+  pivot_wider(names_from = TYPE, values_from = TempDifference) %>%
+  rowwise() %>%
+  mutate(anom_1mo = SOS_typical,
+         anom_2mo = (anom_1mo + SOS_typical_sub1),
+         anom_3mo = anom_2mo + SOS_typical_sub2,
+         anom_4mo = anom_3mo + SOS_typical_sub3,
+         anom_5mo = anom_4mo + SOS_typical_sub4) %>%
+  full_join(NutNetPheno_wide)
+
+
+#####
+# Window around MAX date
+#####
+#MONTH
+clim_month_maxwindow <- CLIMYRS_ALL %>% 
+  select(site, gs, TYPICALMAX) %>%
+  mutate(MAX_typical = month(TYPICALMAX),
+         MAX_typical_sub1  = month(TYPICALMAX - 30),
+         MAX_typical_plus1  = month(TYPICALMAX + 30),
+         MAX_typical_sub2  = month(TYPICALMAX - 60),
+         MAX_typical_plus2  = month(TYPICALMAX + 60),
+         MAX_typical_sub3  = month(TYPICALMAX - 90),
+         MAX_typical_plus3  = month(TYPICALMAX + 90),
+         MAX_typical_sub4  = month(TYPICALMAX - 120),
+         MAX_typical_plus4  = month(TYPICALMAX + 120)) %>%
+  gather(-site, -gs, -TYPICALMAX, key = "TYPE", value = "MONTH")
+#YEAR
+clim_year_maxwindow <- CLIMYRS_ALL %>% 
+  select(site, gs, TYPICALMAX) %>% 
+  mutate(MAX_typical = year(TYPICALMAX),
+         MAX_typical_sub1 = year(TYPICALMAX - 30),
+         MAX_typical_plus1 = year(TYPICALMAX + 30),
+         MAX_typical_sub2 = year(TYPICALMAX - 60),
+         MAX_typical_plus2 = year(TYPICALMAX + 60),
+         MAX_typical_sub3 = year(TYPICALMAX - 90),
+         MAX_typical_plus3 = year(TYPICALMAX + 90),
+         MAX_typical_sub4 = year(TYPICALMAX - 120),
+         MAX_typical_plus4 = year(TYPICALMAX + 120))  %>%
+  gather(-site, -gs, -TYPICALMAX, key = "TYPE", value = "YEAR")
+
+ee_clim_maxwindow <- full_join(clim_month_maxwindow, clim_year_maxwindow) %>%
+  left_join(ClimChange %>%
+            mutate(MONTH = month(plotdate),
+                   YEAR = year(plotdate))) %>%
+  select(site, gs, TYPE, TempDifference) %>%
+  pivot_wider(names_from = TYPE, values_from = TempDifference) %>%
+  rowwise() %>%
+  mutate(anom_1mo = MAX_typical, 
+         anom_3mo = (MAX_typical + MAX_typical_sub1 + MAX_typical_plus1),
+         anom_5mo = anom_3mo + MAX_typical_sub2 + MAX_typical_plus2,
+         anom_7mo = anom_5mo + MAX_typical_sub3 + MAX_typical_plus3,
+         anom_9mo = anom_7mo + MAX_typical_sub4 + MAX_typical_plus4) %>%
+  full_join(NutNetPheno_wide) #%>%
+  # mutate(TypicalGSL = EOStypicaldate - SOStypicaldate,
+         # ChangeGSL = GSLength - TypicalGSL)
+
+
+###
+# Programatically look at temp changes
+###
+climdataframe <- tibble(
+  site = numeric(), 
+  sos1moF = numeric(), sos1moP = numeric(),
+  sos2moF = numeric(), sos2moP = numeric(), sos2moSLOPE = numeric(),
+  sos3moF = numeric(), sos3moP = numeric(),
+  sos4moF = numeric(), sos4moP = numeric(),
+  max1moF = numeric(), max1moP = numeric(),
+  max3moF = numeric(), max3moP = numeric(),
+  max5moF = numeric(), max5moP = numeric(), max5moSLOPE = numeric(),
+  max7moF = numeric(), max7moP = numeric(),
+  max9moF = numeric(), max9moP = numeric())
+
+climate_anom <- ee_clim_maxwindow %>%
+  select(site, gs, anom_1mo, anom_3mo, anom_5mo, anom_7mo, anom_9mo) %>%
+  gather(-site, -gs, key = Type, value = TempAnom) %>%
+  mutate(Type = paste0(Type, "_max")) %>%
+  bind_rows( ee_clim_soswindow %>%
+               select(site, gs, anom_1mo, anom_2mo, anom_3mo, anom_4mo, anom_5mo) %>%
+               gather(-site, -gs, key = Type, value = TempAnom) %>%
+               mutate(Type = paste0(Type, "_sos"))) %>%
+  full_join(longtermsites) %>% #select(-sitenum)
+  rename(sitenum2 = sitenum)
+
+statsdataframe <- tibble(
+  site = numeric(), 
+  sosF = numeric(), sosP = numeric(), sosSLOPE = numeric(),
+  eosF = numeric(), eosP = numeric(), 
+  gslF = numeric(), gslP = numeric(), gslSLOPE = numeric(), 
+  maxndviF = numeric(), maxndviP = numeric(), maxNDVISLOPE = numeric())
+
+
+clim_statssite_summary <- climdataframe
+for (i in c(1:nrow(longtermsites))) {
+  a <- i
+  sitefilter <- climate_anom %>% filter(sitenum2 == a)
+  
+  max1mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {
+    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_1mo_max')))
+  } else {max1mo_mod <- statsdataframe}
+  max1moF <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {Anova(max1mo_mod)$`F value`[1]} else {NA}
+  max1moP <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {Anova(max1mo_mod)$`Pr(>F)`[1]} else {NA}
+  
+  max3mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_3mo_max')))
+  } else {max3mo_mod <- statsdataframe}
+  max3moF <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {max3mo_mod$`F value`[1]} else {NA}
+  max3moP <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {max3mo_mod$`Pr(>F)`[1]} else {NA}
+
+  max5mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {
+    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_5mo_max')))
+  } else {max5mo_mod <- statsdataframe}
+  max5moF <-   if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {Anova(max5mo_mod)$`F value`[1]} else {NA}
+  max5moP <-   if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {Anova(max5mo_mod)$`Pr(>F)`[1]} else {NA}
+  max5moSLOPE <- if (nrow(filter(sitefilter, Type == "anom_5mo_max")) > 2) { max5mo_mod$coefficients[2] } else {NA}
+
+  max7mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_7mo_max')))
+  } else {max7mo_mod <- statsdataframe}
+  max7moF <-   if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {max7mo_mod$`F value`[1]} else {NA}
+  max7moP <-   if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {max7mo_mod$`Pr(>F)`[1]} else {NA}
+
+  max9mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_9mo_max')))
+  } else {max9mo_mod <- statsdataframe}
+  max9moF <-   if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {max9mo_mod$`F value`[1]} else {NA}
+  max9moP <-   if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {max9mo_mod$`Pr(>F)`[1]} else {NA}
+
+  sos1mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_1mo_sos')))
+  } else {sos1mo_mod <- statsdataframe}
+  sos1moF <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {sos1mo_mod$`F value`[1]} else {NA}
+  sos1moP <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {sos1mo_mod$`Pr(>F)`[1]} else {NA}
+        
+  sos2mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {
+    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_2mo_sos')))
+  } else {sos2mo_mod <- statsdataframe}
+  sos2moF <-   if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {Anova(sos2mo_mod)$`F value`[1]} else {NA}
+  sos2moP <-   if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {Anova(sos2mo_mod)$`Pr(>F)`[1]} else {NA}
+  sos2moSLOPE <- if (nrow(filter(sitefilter, Type == "anom_2mo_sos")) > 2) { sos2mo_mod$coefficients[2] } else {NA}
+        
+  sos3mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_3mo_sos')))
+  } else {sos3mo_mod <- statsdataframe}
+  sos3moF <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {sos3mo_mod$`F value`[1]} else {NA}
+  sos3moP <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {sos3mo_mod$`Pr(>F)`[1]} else {NA}
+        
+  sos4mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {
+    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_4mo_sos')))
+  } else {sos4mo_mod <- statsdataframe}
+  sos4moF <-   if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {sos4mo_mod$`F value`[1]} else {NA}
+  sos4moP <-   if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {sos4mo_mod$`Pr(>F)`[1]} else {NA}
+        
+  CLIMstats <- tibble(a, 
+                  sos1moF, sos1moP,
+                  sos2moF, sos2moP, sos2moSLOPE, 
+                  sos3moF, sos3moP,
+                  sos4moF, sos4moP,
+                  max1moF, max1moP,
+                  max3moF, max3moP,
+                  max5moF, max5moP, max5moSLOPE, 
+                  max7moF, max7moP,
+                  max9moF, max9moP)
+  clim_statssite_summary <- rbind (CLIMstats, clim_statssite_summary)
+}
+
+climfinalstats <- (dplyr::select(clim_statssite_summary, a,  sos1moF, sos2moF,sos3moF, sos4moF, 
+                                 max1moF, max3moF, max5moF, max7moF,max9moF) %>% 
+                     gather(Type, Value, -a) %>% 
+                     mutate(Stat = 'F value')) %>%
+  bind_rows((dplyr::select(clim_statssite_summary, a, sos1moP, sos2moP,sos3moP, sos4moP, max1moP, max3moP, max5moP, max7moP,max9moP) %>% 
+               gather(Type, Value, -a) %>% 
+               mutate(Stat = 'P value'))) %>%
+  bind_rows(select(clim_statssite_summary, a, max5moSLOPE, sos2moSLOPE) %>%
+              gather(Type, Value, -a) %>%
+              mutate(Stat = "Slope")) %>%
+  rename(sitenum2 = a) %>%
+  mutate(Type = recode(Type, "sos1moF" = "anom_1mo_sos", "sos1moP" = "anom_1mo_sos",
+                       "sos2moF" = "anom_2mo_sos", "sos2moP" = "anom_2mo_sos", "sos2moSLOPE" = "anom_2mo_sos",
+                       "sos3moF" = "anom_3mo_sos", "sos3moP" = "anom_3mo_sos",
+                       "sos4moF" = "anom_4mo_sos", "sos4moP" = "anom_4mo_sos",
+                       "max1moF" = "anom_1mo_max", "max1moP" = "anom_1mo_max",
+                       "max3moF" = "anom_3mo_max", "max3moP" = "anom_3mo_max",
+                       "max5moF" = "anom_5mo_max", "max5moP" = "anom_5mo_max", "max5moSLOPE" = "anom_5mo_max",
+                       "max7moF" = "anom_7mo_max", "max7moP" = "anom_7mo_max",
+                       "max9moF" = "anom_9mo_max", "max9moP" = "anom_9mo_max")) %>%
+  full_join((longtermsites %>% select(-sitenum)))  %>% 
+  dplyr::select(-sitenum2) %>%
+  full_join(climate_anom) %>%
+  mutate(includeCHANGE = ifelse(Stat == 'P value' & Value <= 0.05, 'sig', 'ns')) %>%
+  filter(Stat != "F value")
+
+
+# climfinalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'anom_2mo_sos', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = TempAnom)) +
+#   geom_hline(yintercept = 0, lty = 2)+
+#   geom_point() +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   facet_wrap(~site) +
+#   theme_cowplot() +
+#   labs(x='Growing Season', y='Temp anom (2 month window around typical SOS)')
+# 
+# 
+# climfinalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'anom_5mo_max', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = TempAnom)) +
+#   geom_hline(yintercept = 0, lty = 2)+
+#   geom_point() +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   facet_wrap(~site) +
+#   theme_cowplot() +
+#   labs(x='Growing Season', y='Temp anom (5 month window around typical MAX)')
+
+```
+
+
+
 # This is where csv files pulled from Git can be used
 * Notice that NDVI and ANPP do line up pretty well, it is site specific and sometimes sites don't have that many years. 
 * To really explore trends, I've filtered so that sites must have atleast 10 years of NDVI changes extracted
@@ -1891,7 +2190,7 @@ grow = 1980
 # write_csv(NutNetPheno_wide, './NutNetPheno_wide.csv')
 # 
 # 
-# FilterN10Richness <- NutNetPheno_wide %>%
+# longtermsites <- NutNetPheno_wide %>%
 #   filter(!is.na(GSLength)) %>%
 #   group_by(site) %>%
 #   summarise(N = n()) %>%
@@ -1901,10 +2200,12 @@ grow = 1980
 #   inner_join(NutNetPheno_long %>%
 #                group_by(site) %>%
 #                summarise(sitenum = mean(sitenum)))
-# write_csv(FilterN10Richness, './FilterN10Richness.csv')
+# write_csv(longtermsites, './longtermsites.csv')
 # 
+# levels(as.factor(longtermsites$site))
+# # 
 # SiteInfoChar <- SiteInfo %>%
-#   filter(site %in% FilterN10Richness$site)
+#   filter(site %in% longtermsites$site)
 # write_csv(SiteInfoChar,'./SiteInfo.csv') #ndep, soil info, habitat, continent, etc
 # 
 # write_csv(allfittedndvi, './NutNetPheno_allfittedNDVI.csv')
