@@ -10,10 +10,10 @@ output:
   github_document:
     toc: true
 urlcolor: blue
+always_allow_html: true
 ---
 
 ```{r packages, include=F, echo=F, message=F}
-library("tidyverse")
 library("sf")
 library("rnaturalearth")
 library("cowplot")
@@ -21,6 +21,8 @@ library("lubridate")
 library("raster")
 library("knitr")
 library("kableExtra")
+library("plotly")
+library("tidyverse")
 ```
 
 # Overview
@@ -44,7 +46,7 @@ dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
 process_raw_climate <- FALSE # TRUE
 
-process_raw_ndvi <- TRUE # TRUE
+process_raw_ndvi <- FALSE # TRUE
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -389,7 +391,7 @@ ClimChange_wc %>%
 
 Indeed, using CEDA data to calculate averages as well as anomolies proves to be a much more logical metric. Cowichan data seems *much* more logical now. 
 
-
+**Write/read file called `ClimChange`**
 ```{r ceda_avg, echo=F, message=F, warning=F}
 # min(montlycru$plotdate)
 # max(montlycru$plotdate)
@@ -1191,7 +1193,7 @@ Going thru the setps in more detail:
 
 1) Create functions to convert linear (julian) calendar days into radian (circular) data. (becuase southern hemisphere/mediterranean sites which green up on, say julian day 365 on average...but if one year greens up on julian day 1, this is a 1 day difference NOT a -365 day difference)
 
-```{r radianfxn echo=F}
+```{r radianfxn, message=F, warning=F, echo=F}
 circmean_degrees <- function(x) {
   x_radians <- x * pi / 180
   sinr <- sum(sin(x_radians))
@@ -1454,14 +1456,8 @@ if (process_raw_ndvi == TRUE) {
     mutate(weights = ifelse((NDVI == MAXNDVI & weights == 999), 1, .5))
   
   write.csv(pheno_data_all, "pheno_data_all.csv")
-  
-} else {
-  print("not processing raw NDVI data")
-}
 
-pheno_data_all <- read_csv("./pheno_data_all.csv")
-
-kable(pheno_data_all %>% group_by(site) %>%
+  kable(pheno_data_all %>% group_by(site) %>%
   summarise(
     `Start Date` = min(Date),
     `End Date` = max(Date),
@@ -1473,6 +1469,12 @@ kable(pheno_data_all %>% group_by(site) %>%
   rename(`NDVI Green-up threshold` = Max50) %>%
   dplyr::select(`Site number`, site, `Start Date`, `End Date`, `Julian GS start date`, `NDVI Green-up threshold`, `N images (w/ shoulders)`)) %>%
   kable_styling("striped", full_width = F)
+  
+} else {
+  print("not processing raw NDVI data")
+}
+
+pheno_data_all <- read_csv("./pheno_data_all.csv")
 
 ```
 
@@ -1749,7 +1751,7 @@ NutNetPheno_long <- read_csv("./NutNetPheno_long.csv")
 
 ```
 
-5) For ploting purposes, the individual year-site combo splines were run again, and all the fitted NDVI values extracted
+5) For ploting purposes, the individual year-site combo splines were run again, and all the fitted NDVI values extracted. Make a test figure here
 
 ```{r fittedndvi, eval = T, echo = F, message = F, warning = F}
 
@@ -1837,7 +1839,7 @@ NutNetPheno_wide <- NutNetPheno_long %>%
 test = "elliot" #comp
 grow = 1980
 #plot of various locations
-ggplotly(allfittedndvi %>% 
+(allfittedndvi %>% 
   filter(site == test, gs >=grow) %>% 
   ggplot(aes(x = Date, y = ndvi)) +
   geom_point(size = .1) +
@@ -1854,58 +1856,58 @@ ggplotly(allfittedndvi %>%
 * To really explore trends, I've filtered so that sites must have atleast 10 years of NDVI changes extracted
 
 ```{r comboerrrything, eval = T, echo = F, message = F, warning = F}
-write_csv(ClimChange,'./ClimChange.csv') #temp anomalies
-write_csv(yrprod, './NPPINFO.csv') #npp
-PHENO_DATA_ALL <- pheno_data_all %>%
-  rename(gs = GrowingSeason)
-write_csv(pheno_data_all, './NutNetPheno_landsatNDVI.csv')
-write_csv(NutNetPheno_long, './NutNetPheno_long.csv')
-NutNetPheno_wide <- NutNetPheno_long %>%
-  dplyr::select(site, gs, Type, DaysFromAvg) %>%
-  spread(Type, DaysFromAvg) %>%
-  rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
-  full_join(NutNetPheno_long %>%
-              dplyr::select(site, gs, Type, ndvi) %>%
-              spread(Type, ndvi) %>%
-              # select(-gsl) %>%
-              rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
-  full_join(NutNetPheno_long %>%
-              dplyr::select(site, gs, Type, Date) %>%
-              spread(Type, Date) %>%
-              #select(-gsl) %>%
-              mutate(GSLength = `senescence date` - `green-up date`) %>%
-              rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
-  full_join(NutNetPheno_long %>%
-              dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
-              filter(Type!= "gsl") %>%
-              pivot_wider(names_from = Type, values_from = TypicalDate) %>%
-              rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
-              mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
-  mutate(ChangeGSL = GSLength - TypicalGSL) %>%
-  filter(!is.na(GSLength)) %>%
-  full_join(NutNetPheno_long %>%
-              filter(Type == "max") %>%
-              dplyr::select(site, gs, Change_ndvi_max))
-write_csv(NutNetPheno_wide, './NutNetPheno_wide.csv')
-
-
-FilterN10Richness <- NutNetPheno_wide %>%
-  filter(!is.na(GSLength)) %>%
-  group_by(site) %>%
-  summarise(N = n()) %>%
-  filter(N>=10) %>%
-  select(-N) %>%
-  filter(site %in% SiteInfo$site) %>%
-  inner_join(NutNetPheno_long %>%
-               group_by(site) %>%
-               summarise(sitenum = mean(sitenum)))
-write_csv(FilterN10Richness, './FilterN10Richness.csv')
-
-SiteInfoChar <- SiteInfo %>%
-  filter(site %in% FilterN10Richness$site)
-write_csv(SiteInfoChar,'./SiteInfo.csv') #ndep, soil info, habitat, continent, etc
-
-write_csv(allfittedndvi, './NutNetPheno_allfittedNDVI.csv')
+# write_csv(ClimChange,'./ClimChange.csv') #temp anomalies
+# write_csv(yrprod, './NPPINFO.csv') #npp
+# PHENO_DATA_ALL <- pheno_data_all %>%
+#   rename(gs = GrowingSeason)
+# write_csv(pheno_data_all, './NutNetPheno_landsatNDVI.csv')
+# write_csv(NutNetPheno_long, './NutNetPheno_long.csv')
+# NutNetPheno_wide <- NutNetPheno_long %>%
+#   dplyr::select(site, gs, Type, DaysFromAvg) %>%
+#   spread(Type, DaysFromAvg) %>%
+#   rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
+#   full_join(NutNetPheno_long %>%
+#               dplyr::select(site, gs, Type, ndvi) %>%
+#               spread(Type, ndvi) %>%
+#               # select(-gsl) %>%
+#               rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
+#   full_join(NutNetPheno_long %>%
+#               dplyr::select(site, gs, Type, Date) %>%
+#               spread(Type, Date) %>%
+#               #select(-gsl) %>%
+#               mutate(GSLength = `senescence date` - `green-up date`) %>%
+#               rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
+#   full_join(NutNetPheno_long %>%
+#               dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
+#               filter(Type!= "gsl") %>%
+#               pivot_wider(names_from = Type, values_from = TypicalDate) %>%
+#               rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
+#               mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
+#   mutate(ChangeGSL = GSLength - TypicalGSL) %>%
+#   filter(!is.na(GSLength)) %>%
+#   full_join(NutNetPheno_long %>%
+#               filter(Type == "max") %>%
+#               dplyr::select(site, gs, Change_ndvi_max))
+# write_csv(NutNetPheno_wide, './NutNetPheno_wide.csv')
+# 
+# 
+# FilterN10Richness <- NutNetPheno_wide %>%
+#   filter(!is.na(GSLength)) %>%
+#   group_by(site) %>%
+#   summarise(N = n()) %>%
+#   filter(N>=10) %>%
+#   select(-N) %>%
+#   filter(site %in% SiteInfo$site) %>%
+#   inner_join(NutNetPheno_long %>%
+#                group_by(site) %>%
+#                summarise(sitenum = mean(sitenum)))
+# write_csv(FilterN10Richness, './FilterN10Richness.csv')
+# 
+# SiteInfoChar <- SiteInfo %>%
+#   filter(site %in% FilterN10Richness$site)
+# write_csv(SiteInfoChar,'./SiteInfo.csv') #ndep, soil info, habitat, continent, etc
+# 
+# write_csv(allfittedndvi, './NutNetPheno_allfittedNDVI.csv')
 
 ```
 
