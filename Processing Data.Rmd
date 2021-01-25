@@ -528,7 +528,7 @@ SiteInfo <- ndep %>%
 ###
 # Site biomass
 ###
-yrprod1 <- dropbox %>%
+sitenpp1 <- dropbox %>%
   separate(site_code, into = c("site", "country"), sep = "[.]") %>%
   filter(trt == "Control") %>%
   group_by(site, year) %>%
@@ -539,13 +539,13 @@ yrprod1 <- dropbox %>%
   rename(gs = year) %>%
   filter(!is.na(sdANPP))
 
-yrprod <- yrprod1 %>%
+sitenpp <- sitenpp1 %>%
   group_by(site) %>%
   summarise(YrsBiomass = n()) %>%
-  left_join(yrprod1)
+  left_join(sitenpp1)
 
 # #plot
-# yrprod %>%
+# sitenpp %>%
 #   gather(Msmr, Value, -site, -gs) %>%
 #   mutate(Msmr = dplyr::recode(Msmr, "ANPP" = "ANPP g/m2", "sdANPP" = "St. Dev ANPP")) %>%
 #   ggplot(aes(Value)) +
@@ -1857,7 +1857,7 @@ grow = 1980
 
 ```{r comboerrrything, eval = T, echo = F, message = F, warning = F}
 # write_csv(ClimChange,'./ClimChange.csv') #temp anomalies
-# write_csv(yrprod, './NPPINFO.csv') #npp
+# write_csv(sitenpp, './NPPINFO.csv') #npp
 # PHENO_DATA_ALL <- pheno_data_all %>%
 #   rename(gs = GrowingSeason)
 # write_csv(pheno_data_all, './NutNetPheno_landsatNDVI.csv')
@@ -1908,6 +1908,18 @@ grow = 1980
 # write_csv(SiteInfoChar,'./SiteInfo.csv') #ndep, soil info, habitat, continent, etc
 # 
 # write_csv(allfittedndvi, './NutNetPheno_allfittedNDVI.csv')
+
+
+#NDVI plus ANPP
+ANDREWALL <- NutNetPheno_wide %>% 
+  left_join(sitenpp) %>%
+  right_join(SiteInfo) %>%
+  # left_join(ClimChange) #this hasn't been calculated in greenup periods yet
+  mutate(ChangeSOS = as.numeric(ChangeSOS),
+         ChangeMAX = as.numeric(ChangeMAX),
+         ChangeEOS = as.numeric(ChangeEOS),
+         GSLength = as.numeric(GSLength)) 
+
 
 ```
 
