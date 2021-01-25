@@ -53,7 +53,8 @@ sites_nutnet <- sites %>%
   dplyr::select(site_code, "GEE coordinates") %>%
   separate("GEE coordinates", sep = ',', into = c('long', 'lat')) %>%
   filter(!is.na(long)) %>%
-  mutate(lat = as.numeric(lat), long = as.numeric(long))
+  mutate(lat = as.numeric(lat), long = as.numeric(long)) %>%
+  filter(site_code != "ethass.au") #this site just isn't greening up....google earth confirms it appears to be mostly rock where the lat/long are pointing to. So this needs pi confirmation to be included
 sites_nutnet_sp <- sites_nutnet
 coordinates(sites_nutnet_sp) <- ~long + lat
 
@@ -64,11 +65,10 @@ And just for fun, here is a map of the sites in this analysis
 
 ```{r sitemap, echo=F}
 world <- ne_countries(scale = "medium", returnclass = "sf")
-(ggplot(data = world, label = site) +
+ggplot(data = world, label = site) +
   geom_sf() +
-  geom_point(data = sites, aes(x = longitude, y = latitude), col = "orange2") +
-  theme_bw() +
-  labs(title = "111 sites in analysis here"))
+  geom_point(data = sites_nutnet, aes(x = long, y = lat), col = "orange2") +
+  theme_bw() 
 ```
 
 ## Process weather & climate data
@@ -1249,7 +1249,8 @@ if (process_raw_ndvi == TRUE) {
     group_by(site, Date) %>%
     summarise(NDVI = mean(NDVI)) %>%
     mutate(NDVI = if_else(NDVI < 0, 0, NDVI)) %>%
-    arrange(site, Date)
+    arrange(site, Date) %>%
+    filter(site != "ethass") #never greening up, middle of rock 
 } else {
   print("not processing raw NDVI data")
 }
@@ -1279,7 +1280,7 @@ if (process_raw_ndvi == TRUE) {
 
   min_ndvi <- ndviemptydataframe
   for (i in c(1:nrow(min_ndvi_name))) {
-    b <- i
+    b <- i #30 = elliott, 33 = ethass
     plot.filter <- (min_ndvi_name %>% full_join(pheno_data, by = "site")) %>% filter(sitenum == b)
     spline <- smooth.spline(x = plot.filter$Date, y = plot.filter$NDVI)
     ndvi <- as_tibble(predict(spline, as.numeric(ymd(min(plot.filter$Date))):as.numeric(ymd(max(plot.filter$Date))), deriv = 0)) %>%
@@ -1289,6 +1290,11 @@ if (process_raw_ndvi == TRUE) {
         sitenum = b
       )
     min_ndvi <- bind_rows(min_ndvi, ndvi)
+    
+    # ggplotly(min_ndvi %>% 
+    #   ggplot(aes(x = Date, y = ndvi)) +
+    #   geom_point())
+    
   }
 
   min_ndvifitted <- full_join(min_ndvi, min_ndvi_name)
@@ -1298,7 +1304,7 @@ if (process_raw_ndvi == TRUE) {
     group_by(site, Year) %>%
     summarise(ndvi_min = min(ndvi), ndvi_max = max(ndvi)) %>%
     rename(ndvi = ndvi_min) %>%
-    mutate(DaysInYear = if_else(leap_year(Year) == "TRUE", 366, 365)) %>%
+    mutate(DaysInYear = ifelse(leap_year(Year) == "TRUE", 366, 365)) %>%
     left_join((min_ndvifitted %>%
       mutate(Year = year(Date)))) %>%
     mutate(Julian = yday(Date)) %>%
@@ -1323,7 +1329,7 @@ if (process_raw_ndvi == TRUE) {
   GSmain <- siteinfo %>%
     full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
     mutate(
-      startyr = if_else(Start > 182, year - 1, (year)),
+      startyr = ifelse(Start > 182, year - 1, (year)),
       normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
       normalstart = ymd(normalstart),
       normalend = normalstart + 364,
@@ -1349,7 +1355,7 @@ if (process_raw_ndvi == TRUE) {
   GSearly <- siteinfo %>%
     full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
     mutate(
-      startyr = if_else(Start > 182, year - 1, (year)),
+      startyr = ifelse(Start > 182, year - 1, (year)),
       normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
       normalstart = ymd(normalstart),
       normalend = normalstart + 364,
@@ -1375,7 +1381,7 @@ if (process_raw_ndvi == TRUE) {
   GSlate <- siteinfo %>%
     full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
     mutate(
-      startyr = if_else(Start > 182, year - 1, (year)),
+      startyr = ifelse(Start > 182, year - 1, (year)),
       normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
       normalstart = ymd(normalstart),
       normalend = normalstart + 365,
@@ -1402,7 +1408,7 @@ if (process_raw_ndvi == TRUE) {
   GScutoffs <- siteinfo %>%
     full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
     mutate(
-      startyr = if_else(Start > 182, year - 1, (year)),
+      startyr = ifelse(Start > 182, year - 1, (year)),
       normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
       normalstart = ymd(normalstart),
       normalend = normalstart + 364,
@@ -1445,7 +1451,7 @@ if (process_raw_ndvi == TRUE) {
       MINNDVI = min(NDVI)
     ) %>%
     full_join(pheno_data_all_2) %>%
-    mutate(weights = if_else((NDVI == MAXNDVI & weights == 999), 1, .5))
+    mutate(weights = ifelse((NDVI == MAXNDVI & weights == 999), 1, .5))
   
   write.csv(pheno_data_all, "pheno_data_all.csv")
   
@@ -1467,11 +1473,280 @@ kable(pheno_data_all %>% group_by(site) %>%
   rename(`NDVI Green-up threshold` = Max50) %>%
   dplyr::select(`Site number`, site, `Start Date`, `End Date`, `Julian GS start date`, `NDVI Green-up threshold`, `N images (w/ shoulders)`)) %>%
   kable_styling("striped", full_width = F)
+
 ```
 
 
+4) 
+* Then we fit cubic splines to each site-year combo. These splines are weighted (max NDVI in each year = weight 1; all others = weight 0.5), and have a smoothing parameter of 0.5 (spar = 0.5).
+* Each site-year combo must have atleast 10 NDVI readings (measurementscutoff) for us to determine phenological dates. 
+* Some extra critera are added to determining the phenological dates.
+
+  + Green-up:
+    - The first derivative needed to indicate that the NDVI was increasing (first deriv > 0)
+    - The NDVI needed to be above 0 (a low threshold, very easy!)
+    - Green-up date was the FIRST DAY where NDVI was above the green-up threshold + 0.02 NDVI (I forget what all the problems were if it was simply just the cutoff, but they were there)
+    - The green-up date must occur within the "main" growing season (not within the shoulder seasons).
+
+  + Maximum:
+    - Must occur after green-up date but within the "main" growing season (no shoulder seasons)
+    - If there was no green-up date (due to sparse data, no rain, fire, whatever), we still forced a maximum NDVI date
+
+  + Senescense:
+    - The first derivative must be negative (indicating decling function/NDVI)
+    - Must occur after the maximum NDVI date
+    - NDVI must be less than the green-threshold (< Max50) but ABOVE the threshold - 0.05 (ndvi > (Max50 - .05))). Had to do this so that it wouldn't pick a senescence date that had a crazy low NDVI in the event of sparse data. 
+
+* Then all the dates were "redialed" as departure from the average start/end at each site to get change over time
+
+```{r splineseachGS, eval = T, echo = F, message = F, warning = F}
+if (process_raw_ndvi == TRUE) {
+
+  ##################
+# with shoulder data; EACH SITE-YEAR COMBO NEEDS ITS OWN SPLINE. 
+##################
+emptydataframe <- tibble(
+  x = numeric(),
+  ndvi = numeric(),
+  Date = as_date(character()),
+  first.deriv = numeric(),
+  Julian = numeric(),
+  sitenum = numeric(0),
+  site = character(),
+  GrowingSeason = numeric(),
+  Type = character(),
+  gs = numeric(),
+  END = character()
+)
+
+site_summary <- emptydataframe
+for (i in c(1:nrow(siteinfo2))) {
+  a <- i
+  plot.filter <-  pheno_data_all %>% filter(sitenum == a) 
+  gs_summary <- emptydataframe
+  for (i in c((year(min(plot.filter$Date)) + 1):year(max(plot.filter$Date)) )) { #since no GSType shoulder in the first year, so gotta exlude. 
+    gs <- i
+    lowndvi <- (0)
+    measurementscutoff <- 10 #min number of observations to have in gs -->> 7 = way too lax, 10 = better! 
+    gs.filter <- plot.filter %>% filter(GrowingSeason == gs) 
+    
+    spline <- if (nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff ) {
+      smooth.spline(x = gs.filter$Date, y = gs.filter$NDVI, spar = .5, w=gs.filter$weights) 
+    } else {NA} 
+    
+    ndvi <-  if (nrow(filter(gs.filter, GSType=='mainGS')) >= measurementscutoff) {
+      as_tibble(predict(spline, as.numeric(ymd(min(gs.filter$Date))):as.numeric(ymd(max(gs.filter$Date))), deriv = 0)) %>%
+        rename(ndvi = y) %>%
+        mutate(Date = as_date(x)) 
+    } else {NA}
+    
+    first.deriv <- if (nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff) {
+      as_tibble(predict(spline, as.numeric(ymd(min(gs.filter$Date))):as.numeric(ymd(max(gs.filter$Date))), deriv = 1)) %>%
+        rename(first.deriv = y) %>%
+        mutate(norm.first.deriv = ((1--1) / (max(first.deriv) - min(first.deriv)) * (first.deriv - max(first.deriv)) + 1))
+    } else {NA}
+    
+    smoothed.data <- if(nrow(filter(gs.filter, GSType == 'mainGS'))>= measurementscutoff) {
+      full_join(ndvi, first.deriv, by = "x") %>%
+        mutate(Date = as_date(x)) %>% #as.Date
+        mutate(change.ndvi = (ndvi - lag(ndvi, n = 1L))) %>%
+        mutate(GrowingSeason = gs) %>%    
+        mutate(Julian = yday(Date)) %>%
+        mutate(sitenum = a) %>%
+        left_join(siteinfo2, by = 'sitenum')
+    } else {emptydataframe}
+    
+    GreenUpDate <- if (nrow(smoothed.data %>% 
+                            filter(first.deriv > 0, 
+                                   ndvi > lowndvi, 
+                                   ndvi < (Max50 + 0.05), #for elliot  + 0.03; for lagoas 0.05
+                                   Date > max(gs.filter$normalstart ), 
+                                   Date < max(gs.filter$normalend - 90))) > 0) { #ethass, start must be 3 mo before end or
+      (smoothed.data %>% filter(first.deriv > 0, 
+                                ndvi > Max50, 
+                                ndvi < (Max50 + .05), 
+                                Date < max(gs.filter$Date[gs.filter$GSType == 'mainGS']),
+                                Date > max(gs.filter$normalstart),
+                                Date < max(gs.filter$normalend - 90)) %>% 
+         .[which.min(.$Date),]) 
+    } else { emptydataframe }
+    if (nrow(GreenUpDate) > 0) { GreenUpDate$Type <- "green-up date" } else { GreenUpDate$Type <- character(0) }
+    if (nrow(GreenUpDate) > 0) { GreenUpDate$gs <- gs } else { GreenUpDate$gs <- numeric(0) }
+    if (nrow(GreenUpDate) > 0) { GreenUpDate$sitenum <- a } else { GreenUpDate$sitenum <- numeric(0) }
+    
+    max <- if (nrow(GreenUpDate) >0 ) {
+      smoothed.data %>% filter(Date > GreenUpDate$Date, 
+                               Date <= max(gs.filter$Date[gs.filter$GSType=='mainGS']) ) %>% 
+        .[which.max(.$ndvi), ]
+    } else {
+      (filter(smoothed.data, 
+              Date > (max(gs.filter$normalstart) + 60),
+              Date < (max(gs.filter$normalend) - 60),
+              change.ndvi > 0 )) %>%
+        .[which.max(.$ndvi),]  }
+    if (nrow(max) > 0) { max$Type <- "max" } else { max$Type <- character(0) }
+    if (nrow(max) > 0) { max$gs <- gs } else { max$gs <- character(0) }
+    if (nrow(max) > 0) { max$sitenum <- a } else { max$sitenum <- numeric(0) }
+    
+    SenescenseDate <- if (nrow(GreenUpDate) > 0) {
+      smoothed.data %>% 
+        filter(first.deriv < 0, 
+               Date > max$Date,
+               Date < max(gs.filter$normalend),
+               ndvi < (Max50 + 0.0), #changed due to elliot 2017 (+0.05)...but jorn says keep it 0, 0 make sense
+               ndvi > (Max50 - .05),
+               Date < max(gs.filter$normalend - 30)) %>% #due to marc 2018...senesence can't really be in the next year...
+        .[which.min(.$Date), ] #jorn made me change this form min to max??
+    } else ({emptydataframe})
+    if (nrow(SenescenseDate) > 0) { SenescenseDate$Type <- "senescence date" } else { SenescenseDate$Type <- character(0) }
+    if (nrow(SenescenseDate) > 0) { SenescenseDate$gs <- gs } else { SenescenseDate$gs <- numeric(0) }
+    if (nrow(SenescenseDate) > 0) { SenescenseDate$sitenum <- a } else { SenescenseDate$sitenum <- numeric(0) }
+    
+       # ggplotly(smoothed.data %>%
+       #        ggplot() +
+       #        geom_hline(yintercept = (smoothed.data[[1, 'Max50']] + 0.05)) +
+       #        geom_point(aes(x = Date, y = ndvi))+
+       #        geom_point(aes(x = Date, y = ndvi), col = 'blue', data = filter(smoothed.data,
+       #                                                         first.deriv > 0,
+       #                                                         ndvi > lowndvi,
+       #                                                         ndvi < (smoothed.data[[1, 'Max50']] + 0.05)))+#,
+       #                                                         # Date > ymd("1996-10-21"),
+       #                                                         # Date < ymd("1997-10-20") - 90)) +
+       #          geom_point(aes(x = Date, y = NDVI), data = gs.filter, pch = 2)+
+       #          geom_point(aes(x = Date, y = ndvi), data = max, col = "green", size = 5))
+       # ggplotly(smoothed.data %>%
+       #    ggplot() +
+       #    geom_hline(yintercept = (0.134)) +
+       #    geom_point(aes(x = Date, y = ndvi))+
+       #    geom_point(aes(x = Date, y = ndvi), col = 'blue', data = filter(smoothed.data,
+       #                                                     first.deriv < 0,
+       #                                                     Date > max$Date,
+       #                                                     ndvi < (0.134 + 0.05),
+       #                                                     ndvi > (0.134 - 0.05),
+       #                                                     Date < ymd("2001-02-18") - 30)) +
+       #      geom_point(aes(x = Date, y = NDVI), data = gs.filter, pch = 2)+
+       #      geom_point(aes(x = Date, y = ndvi), data = SenescenseDate, col = "green", size = 5))
+
+    pheno.dates <- bind_rows(GreenUpDate, max, SenescenseDate)
+  
+    gs_summary <- bind_rows(pheno.dates, gs_summary)
+  }
+  site_summary <- bind_rows(gs_summary, site_summary)
+}
 
 
+NutNetPhenoALL <- site_summary %>%
+  dplyr::select(ndvi, Date, Julian, sitenum, Type, gs) %>%
+  full_join(siteinfo2 %>% dplyr::select(-Start, -End)) 
 
+NutNetPhenoFILTER1 <- NutNetPhenoALL %>% #if either sos or eos is missing, don't include those years in the average dates of anything
+  dplyr::select(Julian, gs, site, Type) %>%
+  pivot_wider(names_from = Type, values_from = Julian, id_cols = c(gs, site)) %>%
+  filter(!is.na(`green-up date`), !is.na(`senescence date`)) %>%
+  dplyr::select(gs, site)
+
+NutNetPhenoFILTER2 <- NutNetPhenoFILTER1 %>% group_by(site) %>%
+  summarise(N = n()) %>%
+  filter(N >= 3) %>% #must have 3 yrs data to use
+  left_join(NutNetPhenoFILTER1)
+
+NutNetPheno <- NutNetPhenoALL %>% 
+  right_join(NutNetPhenoFILTER2)
+
+# NutNetPheno %>% filter(site == "pinj")
+# 
+# NutNetPheno %>% filter(gs >= 2018) %>% 
+#   ggplot(aes(x = Date, y = ndvi, col = Type)) +
+#   geom_point() + theme_cowplot()
+
+#then need to redial dates into radians, to get change
+AVG_nnp<-
+  NutNetPheno %>% 
+  mutate(DaysInYear = ifelse(leap_year(gs) == 'TRUE', 366, 365),
+         DegreeJulian = (Julian / DaysInYear * 360)) %>% 
+  group_by(site, Type) %>%
+  summarise(DateRadianAVG = circmean_degrees(DegreeJulian)) %>%
+  mutate(DateDateAVG = DateRadianAVG * 365 / 360,
+         DDAVG = as_date(DateDateAVG),
+         JulAGV = yday(DDAVG)) %>%
+  dplyr::select(site, Type, JulAGV) %>% 
+  spread(Type, JulAGV) 
+
+redial<- AVG_nnp %>%
+  full_join( tibble(site = rep(AVG_nnp$site, each = (2019 - 1981)), 
+                    year = rep(1982:2019, (nrow(AVG_nnp)))),  
+             by = 'site') %>% 
+  rename(maxJul = max,
+         sosJul = `green-up date`,
+         eosJul = `senescence date`) %>%
+  full_join(dplyr::select(siteinfo2, site, Start), by = 'site')  %>% 
+  mutate(startyrGU = ifelse(Start > 182 & sosJul > 182, year - 1, (year)),
+         maxyr = ifelse(Start > 182 & maxJul > Start, year - 1, ifelse(Start < 182 & maxJul < Start, year + 1,  year)),
+         eosyr = ifelse(Start > 182 & eosJul > Start, year - 1, ifelse(Start < 182 & eosJul < Start, year + 1,  year)),
+         SOS = paste(startyrGU, month(as_date(sosJul)), day(as_date(sosJul)), sep = '-'),
+         MAX = paste(maxyr, month(as_date(maxJul)), day(as_date(maxJul)), sep = '-'),
+         EOS = paste(eosyr, month(as_date(eosJul)), day(as_date(eosJul)), sep = '-')) %>% 
+  filter(!is.na(year)) %>% 
+  mutate(SOS=as_date(SOS), 
+         MAX = as_date(MAX), 
+         EOS = as_date(EOS))  %>% 
+  dplyr::select(site, year, SOS, MAX, EOS) %>%
+  gather(Type, TypicalDate, -site, -year) %>%
+  rename(gs = year) %>%
+  mutate(Type= ifelse(Type=='SOS', 'green-up date', ifelse(Type=='MAX', 'max', 'senescence date'))) %>%
+  right_join(
+    NutNetPheno %>% 
+      dplyr::select(site, gs, Type, Date) %>% 
+      spread(Type, Date)  %>% 
+      mutate(GU = ifelse(is.na(`senescence date`), NA, `green-up date`)) %>% 
+      mutate(GU = as_date(GU)) %>% 
+      dplyr::select(-`green-up date`) %>% 
+      rename("green-up date" = GU) %>% 
+      mutate(MAX = ifelse(is.na(`senescence date`), NA, max)) %>% 
+      mutate(MAX = as_date(MAX)) %>% 
+      dplyr::select(-max) %>%
+      rename("max" = MAX) %>% 
+      gather(Type, Date, -site, -gs) %>%
+      filter(!is.na(Date))  ) %>%  
+  mutate(DIFFERENCE = Date - TypicalDate)  
+
+
+# write full data set
+NutNetPheno_long <- redial %>% 
+  full_join(NutNetPheno) %>%
+  left_join(siteinfo2) %>%
+  dplyr::select(-Julian, -TroughDateRadian, -avg_ndvi_min) %>% #, -avg_ndvi_max) %>% 
+  rename(DaysFromAvg = DIFFERENCE) %>%
+  arrange(site, gs, Type) %>%
+  dplyr::select(-Max50, -Start, -End) %>%
+  mutate(Change_ndvi_max = ifelse(Type =="max", (ndvi - avg_ndvi_max), NA)) %>%
+  dplyr::select(-avg_ndvi_max)
+
+NutNetPheno_long %>% 
+  filter(site == "glac", Type == "green-up date") %>%
+  ggplot(aes(x = gs, y = as.numeric(DaysFromAvg))) +
+  geom_smooth(method = "lm") +
+  geom_point() +
+  labs(x = "Growing season", y = "Change from average, \n Green-up Date", title = "Glac") +
+  theme_cowplot()
+
+NutNetPheno_long %>% filter(Type == "green-up date") %>% arrange(-DaysFromAvg)
+NutNetPheno_long %>% filter(Type == "green-up date") %>% arrange(DaysFromAvg)
+
+
+NutNetPheno_long %>%
+  filter(Type == "green-up date") %>% 
+  ggplot() +
+  geom_histogram(aes(x = DaysFromAvg))
+
+write.csv(NutNetPheno_long, "NutNetPheno_long.csv")
+
+} else {
+  print("not processing raw NDVI data")
+}
+
+NutNetPheno_long <- read_csv("./NutNetPheno_long.csv")
+
+```
 
 
