@@ -1749,4 +1749,167 @@ NutNetPheno_long <- read_csv("./NutNetPheno_long.csv")
 
 ```
 
+5) For ploting purposes, the individual year-site combo splines were run again, and all the fitted NDVI values extracted
+
+```{r fittedndvi, eval = T, echo = F, message = F, warning = F}
+
+if (process_raw_ndvi == TRUE) {
+
+#######
+#return all fitted NDVI values
+#####
+full_ndvi_edf <- tibble(
+  x = numeric(),
+  ndvi = numeric(),
+  Date = as_date(character()),
+  sitenum = numeric(0), 
+  gs = numeric())
+
+ndvi_site_summary_edf <- full_ndvi_edf
+
+for (i in c(1:nrow(siteinfo2))) {
+  a <- i
+  plot.filter <- pheno_data_all %>% filter(sitenum == a) 
+  ndvi_gs_summary_edf <- full_ndvi_edf
+  for (i in c(year(min(plot.filter$Date)):year(max(plot.filter$Date)) )) {
+    gs <- i
+    lowndvi <- (0)
+    gs.filter <- plot.filter %>% filter(GrowingSeason == gs) %>%
+      select(GrowingSeason, site, GSType, NDVI, Date, weights)
+    
+    spline <- if (nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff) {
+      smooth.spline(x = gs.filter$Date, y = gs.filter$NDVI, spar = .5, w = gs.filter$weights) 
+    } else {NA}
+    
+    fullndvi_fitting <- if (nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff) {
+      as_tibble(predict(spline, as.numeric(ymd(min(gs.filter$Date))):as.numeric(ymd(max(gs.filter$Date))), deriv = 0)) %>% 
+        rename(ndvi = y) %>% 
+        mutate(Date = as_date(x))
+    } else {full_ndvi_edf}
+    
+    if (nrow(fullndvi_fitting)>0 ) { fullndvi_fitting$sitenum <- a } else { NA}
+    if (nrow(fullndvi_fitting)>0) { fullndvi_fitting$gs <- gs } else { NA }
+    ndvi_gs_summary_edf <- bind_rows(fullndvi_fitting, ndvi_gs_summary_edf)
+  }
+  ndvi_site_summary_edf <- bind_rows(ndvi_gs_summary_edf, ndvi_site_summary_edf)
+}
+
+allfittedndvi <- ndvi_site_summary_edf %>% 
+  left_join(siteinfo2 %>%
+              select(site, sitenum))
+
+write.csv(allfittedndvi, "allfittedndvi.csv")
+
+} else {
+  print("not processing raw NDVI data")
+}
+
+allfittedndvi <- read_csv("./allfittedndvi.csv")
+
+NutNetPheno_wide <- NutNetPheno_long %>%
+  dplyr::select(site, gs, Type, DaysFromAvg) %>%
+  spread(Type, DaysFromAvg) %>%
+  rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, ndvi) %>%
+              spread(Type, ndvi) %>%
+              # select(-gsl) %>%
+              rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, Date) %>%
+              spread(Type, Date) %>%
+              #select(-gsl) %>%
+              mutate(GSLength = `senescence date` - `green-up date`) %>%
+              rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
+              filter(Type!= "gsl") %>%
+              pivot_wider(names_from = Type, values_from = TypicalDate) %>%
+              rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
+              mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
+  mutate(ChangeGSL = GSLength - TypicalGSL) %>%
+  filter(!is.na(GSLength)) %>%
+  full_join(NutNetPheno_long %>%
+              filter(Type == "max") %>%
+              dplyr::select(site, gs, Change_ndvi_max))
+
+#make a test figure
+test = "elliot" #comp
+grow = 1980
+#plot of various locations
+ggplotly(allfittedndvi %>% 
+  filter(site == test, gs >=grow) %>% 
+  ggplot(aes(x = Date, y = ndvi)) +
+  geom_point(size = .1) +
+  geom_point(data = filter(pheno_data_all, site == test, GrowingSeason >= grow), aes(y = NDVI), pch = 21) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), panel.grid.major.x = element_line(colour = 'grey')) +
+  geom_point(data = filter(NutNetPheno_long, site == test, gs >= grow), aes(col = Type), size = 2) +
+  theme_cowplot()+
+  labs(title = test)) 
+
+```
+
+# This is where csv files pulled from Git can be used
+* Notice that NDVI and ANPP do line up pretty well, it is site specific and sometimes sites don't have that many years. 
+* To really explore trends, I've filtered so that sites must have atleast 10 years of NDVI changes extracted
+
+```{r comboerrrything, eval = T, echo = F, message = F, warning = F}
+write_csv(ClimChange,'./ClimChange.csv') #temp anomalies
+write_csv(yrprod, './NPPINFO.csv') #npp
+PHENO_DATA_ALL <- pheno_data_all %>%
+  rename(gs = GrowingSeason)
+write_csv(pheno_data_all, './NutNetPheno_landsatNDVI.csv')
+write_csv(NutNetPheno_long, './NutNetPheno_long.csv')
+NutNetPheno_wide <- NutNetPheno_long %>%
+  dplyr::select(site, gs, Type, DaysFromAvg) %>%
+  spread(Type, DaysFromAvg) %>%
+  rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, ndvi) %>%
+              spread(Type, ndvi) %>%
+              # select(-gsl) %>%
+              rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, Date) %>%
+              spread(Type, Date) %>%
+              #select(-gsl) %>%
+              mutate(GSLength = `senescence date` - `green-up date`) %>%
+              rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
+              filter(Type!= "gsl") %>%
+              pivot_wider(names_from = Type, values_from = TypicalDate) %>%
+              rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
+              mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
+  mutate(ChangeGSL = GSLength - TypicalGSL) %>%
+  filter(!is.na(GSLength)) %>%
+  full_join(NutNetPheno_long %>%
+              filter(Type == "max") %>%
+              dplyr::select(site, gs, Change_ndvi_max))
+write_csv(NutNetPheno_wide, './NutNetPheno_wide.csv')
+
+
+FilterN10Richness <- NutNetPheno_wide %>%
+  filter(!is.na(GSLength)) %>%
+  group_by(site) %>%
+  summarise(N = n()) %>%
+  filter(N>=10) %>%
+  select(-N) %>%
+  filter(site %in% SiteInfo$site) %>%
+  inner_join(NutNetPheno_long %>%
+               group_by(site) %>%
+               summarise(sitenum = mean(sitenum)))
+write_csv(FilterN10Richness, './FilterN10Richness.csv')
+
+SiteInfoChar <- SiteInfo %>%
+  filter(site %in% FilterN10Richness$site)
+write_csv(SiteInfoChar,'./SiteInfo.csv') #ndep, soil info, habitat, continent, etc
+
+write_csv(allfittedndvi, './NutNetPheno_allfittedNDVI.csv')
+
+```
+
+
+
+
 
