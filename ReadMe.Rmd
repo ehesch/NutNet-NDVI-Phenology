@@ -49,7 +49,7 @@ dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
 process_raw_climate <- FALSE # TRUE
 
-process_raw_ndvi <- TRUE
+process_raw_ndvi <- FALSE #TRUE
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -66,15 +66,6 @@ coordinates(sites_nutnet_sp) <- ~long + lat
 sites_nutnet_sp2<- sites_nutnet_sp %>% st_as_sf()
 ```
 
-And just for fun, here is a map of the sites in this analysis
-
-```{r sitemap, echo=F}
-world <- ne_countries(scale = "medium", returnclass = "sf")
-ggplot(data = world, label = site) +
-  geom_sf() +
-  geom_point(data = sites_nutnet, aes(x = long, y = lat), col = "orange2") +
-  theme_bw() 
-```
 
 ## Process weather & climate data
 
@@ -1477,7 +1468,7 @@ if (process_raw_ndvi == TRUE) {
   print("not processing raw NDVI data")
 }
 
-pheno_data_all <- read_csv("./pheno_data_all.csv")
+pheno_data_all <- read_csv("./pheno_data_all.csv", col_type = cols())
 
 ```
 
@@ -1837,7 +1828,7 @@ write.csv(allfittedndvi, "allfittedndvi.csv")
   print("not processing raw NDVI data")
 }
 
-allfittedndvi <- read_csv("./allfittedndvi.csv")
+allfittedndvi <- read_csv("./allfittedndvi.csv", col_types = cols())
 
 #make a test figure
 test = "elliot" #comp
@@ -1856,9 +1847,11 @@ grow = 1980
 ```
 
 
-# Filter sites which have X years of NDVI data
+# Filter sites which have 5 years of extracted phenological data
 
 Given that we are looking at long-term trends, it doesn't make much sense to include sites which only have a minimal amount of years were we could extract meaninfulphenological dates. Reasons that sites might not have enough years include: satellites had poor coverage of location (esp true in earlier landsats), too much cloud cover (and thus couldn't fit a nice trend/too few images during growing season), site never "greened-up" threshold during a given year (important esp for Mediterranean sites, and probably other reasons.
+
+Here  is the list of sites which made the cut: 
 
 ```{r filtershorttermsites, echo=F, message=F, warning=F}
 longtermsites <- NutNetPheno_wide %>%
@@ -1879,8 +1872,10 @@ levels(as.factor(longtermsites$site))
 
 # Start to merge climate data with phenology data
 * The goal is to recognize that some area have bigger temp anomolies, has their phenology/productivity changed more?
-  + We can look weather windows BEFORE/during the typical green-up month (1, 2, 3, 4 mos)
-  + And also do weather windows around the typical date of NDVI max (in both directions, 1 month window, 3 mo, 5, 7, 9 --> essentially a growing season)
+  + We can look weather windows BEFORE/during the typical green-up month (here looking at the 2 month window before the typical green-up date)
+  + And also do weather windows around the typical date of NDVI max (here looking at a 5 month window around the typical maximum ndvi date (basically the month of max ndvi + the 2 months before and after from that date; this is essentially a growing season)
+
+This plot shows sites which have seen a significant warming trend in the green-up window. 
 
 ```{r temptrends, eval = T, echo = F, message = F, warning = F}
 ###
@@ -2141,15 +2136,15 @@ climfinalstats %>%
   labs(x='Growing Season', y='SOS temp anom \n(2-mo window around typical SOS)')
 
 
-climfinalstats %>%
-  filter(includeCHANGE == 'sig', Type == 'anom_5mo_max', Stat == "P value") %>%
-  ggplot(aes(x = gs, y = TempAnom)) +
-  geom_hline(yintercept = 0, lty = 2)+
-  geom_point() +
-  geom_smooth(method='lm', fill=NA, col='black')+
-  facet_wrap(~site) +
-  theme_cowplot() +
-  labs(x='Growing Season', y='GS Temp anom \n(5-mo window around typical MAX)')
+# climfinalstats %>%
+#   filter(includeCHANGE == 'sig', Type == 'anom_5mo_max', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = TempAnom)) +
+#   geom_hline(yintercept = 0, lty = 2)+
+#   geom_point() +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   facet_wrap(~site) +
+#   theme_cowplot() +
+#   labs(x='Growing Season', y='GS Temp anom \n(5-mo window around typical MAX)')
 
 # #example of a site that doesnt change
 # climfinalstats %>%
@@ -2163,10 +2158,8 @@ climfinalstats %>%
 
 
 
-* First, it might be good to see which sites have had changes in pheno dates tho
-- programatically determine which sites have sigificant trends in green-up/senescence
-
 ```{r phenotrends, eval = T, echo = F, message = F, warning = F}
+#get slopes etc from phenological trends
 #all P values
 statsdataframe <- tibble(
   site = numeric(), 
@@ -2308,90 +2301,12 @@ finalstats <- (dplyr::select(statssite_summary, a, sosF, eosF, gslF, maxndviF) %
 
 ```
 
+# Make final df (2 key dataframes)
+
+`df_annual` and `df_site`
 
 
-
-
-# This is where csv files pulled from Git can be used
-* Notice that NDVI and ANPP do line up pretty well, it is site specific and sometimes sites don't have that many years. 
-* To really explore trends, I've filtered so that sites must have atleast 10 years of NDVI changes extracted
-
-```{r comboerrrything, eval = T, echo = F, message = F, warning = F}
-# write_csv(ClimChange,'./ClimChange.csv') #temp anomalies
-# write_csv(sitenpp, './NPPINFO.csv') #npp
-# PHENO_DATA_ALL <- pheno_data_all %>%
-#   rename(gs = GrowingSeason)
-# write_csv(pheno_data_all, './NutNetPheno_landsatNDVI.csv')
-# write_csv(NutNetPheno_long, './NutNetPheno_long.csv')
-# NutNetPheno_wide <- NutNetPheno_long %>%
-#   dplyr::select(site, gs, Type, DaysFromAvg) %>%
-#   spread(Type, DaysFromAvg) %>%
-#   rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
-#   full_join(NutNetPheno_long %>%
-#               dplyr::select(site, gs, Type, ndvi) %>%
-#               spread(Type, ndvi) %>%
-#               # select(-gsl) %>%
-#               rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
-#   full_join(NutNetPheno_long %>%
-#               dplyr::select(site, gs, Type, Date) %>%
-#               spread(Type, Date) %>%
-#               #select(-gsl) %>%
-#               mutate(GSLength = `senescence date` - `green-up date`) %>%
-#               rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
-#   full_join(NutNetPheno_long %>%
-#               dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
-#               filter(Type!= "gsl") %>%
-#               pivot_wider(names_from = Type, values_from = TypicalDate) %>%
-#               rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
-#               mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
-#   mutate(ChangeGSL = GSLength - TypicalGSL) %>%
-#   filter(!is.na(GSLength)) %>%
-#   full_join(NutNetPheno_long %>%
-#               filter(Type == "max") %>%
-#               dplyr::select(site, gs, Change_ndvi_max))
-# write_csv(NutNetPheno_wide, './NutNetPheno_wide.csv')
-# 
-# 
-# longtermsites <- NutNetPheno_wide %>%
-#   filter(!is.na(GSLength)) %>%
-#   group_by(site) %>%
-#   summarise(N = n()) %>%
-#   filter(N>=10) %>%
-#   select(-N) %>%
-#   filter(site %in% SiteInfo$site) %>%
-#   inner_join(NutNetPheno_long %>%
-#                group_by(site) %>%
-#                summarise(sitenum = mean(sitenum)))
-# write_csv(longtermsites, './longtermsites.csv')
-# 
-# levels(as.factor(longtermsites$site))
-# # 
-# SiteInfoChar <- SiteInfo %>%
-#   filter(site %in% longtermsites$site)
-# write_csv(SiteInfoChar,'./SiteInfo.csv') #ndep, soil info, habitat, continent, etc
-# 
-# write_csv(allfittedndvi, './NutNetPheno_allfittedNDVI.csv')
-
-
-#NDVI plus ANPP
-ANDREWALL <- NutNetPheno_wide %>% 
-  left_join(sitenpp) %>%
-  right_join(SiteInfo) %>%
-  # left_join(ClimChange) #this hasn't been calculated in greenup periods yet
-  mutate(ChangeSOS = as.numeric(ChangeSOS),
-         ChangeMAX = as.numeric(ChangeMAX),
-         ChangeEOS = as.numeric(ChangeEOS),
-         GSLength = as.numeric(GSLength)) 
-
-
-```
-
-
-Two key dataframes:
-1) Sites with LONG-TERM 
-
-
-```{r finaldfs}
+```{r finaldfs, echo=F, message=F, warning=F}
 
 #this is site summary
  df_site <-   (longtermsites %>% mutate(check = "included") %>% dplyr::select(site, check)) %>%
@@ -2432,6 +2347,9 @@ df_annual <- NutNetPheno_wide  %>%
                 TypicalMaxNDVI, MAXndvi, Change_ndvi_max) %>%
   full_join(sitenpp) %>%
   arrange(site, gs)
+
+
+df_merge <- df_annual %>% full_join(df_site)
 
 ```
 
@@ -2487,6 +2405,16 @@ kable(df_site %>%
         arrange(-`N sites`))
 ``` 
 
+Here is a map of the sites:
+
+
+```{r sitemap, echo=F}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+ggplot(data = world, label = site) +
+  geom_sf() +
+  geom_point(data = filter(df_site, check == "included"), aes(x = longitude, y = latitude), col = "orange2") +
+  theme_bw() 
+```
 
 ## NDVI is an okay predictor of productivity
 
@@ -2494,7 +2422,7 @@ Of course, some arguements get made that NDVI is less subject to bias/error than
 
 Logistically, I think it makes most sense to include sites that have >= 3 years of biomass+ndvi data in this trend. Because it's not reasonable to think that a tallgrass prairie is going to have the same ndvi-biomass relationship as an alpine meadow and we want to capture the site-trend.
 
-```{r ndviprod, echo=F, message = F, warning=F}
+```{r ndviprod, echo=F, message=F, warning=F, include=F}
 # #whole dataset trend (all years) if want to actually go this route instead....
 # df_annual %>%
 #   filter(!is.na(ANPP_control), !is.na(MAXndvi)) %>% 
@@ -2570,21 +2498,40 @@ summary(m4)
 
 ```
 
+Statistically, AIC scores were compared between 4 different models relating maximum NDVI to ANPP. Because NDVI tends to saturate at high levels of biomass production, sometimes (but not always!) ANPP is related to the log of the maximum NDVI. Sometimes (but not always!) the relationships between NDVI and ANPP are forced through the origin (0,0) as zero NDVI value should indicate no biomass. All of these options were compared with the following models:
 
-```{r}
+1) intercept thru (0,0); ANPP ~ log(maxNDVI)
+2) intercept thru (0,0); ANPP ~ maxNDVI
+3) no fixed interceopt; ANPP ~ log(maxNDVI)
+4) no fixed intercept; ANPP ~ maxNDVI
+
+Model 4 had the lowest AIC score, and yields the following relationship with a r-squared value of ```r summary(m4)$r.squared```:
+
+ANPP = ```r summary(m4)$coefficients[1]``` + maxNDVI * ```r summary(m4)$coefficients[2]```
+
+```{r, include=F, echo=F, message=F, warning=F}
 Anova(lmer(ChangeSOS ~ TempAnom_2mo_sos + (1|site), data = filter(df_annual, !is.na(ChangeSOS), !is.na(TempAnom_2mo_sos) )))
 
 Anova(lmer(as.numeric(ChangeGSL) ~ TempAnom_5mo_max + (1|site), data = filter(df_annual, !is.na(ChangeGSL), !is.na(TempAnom_5mo_max) )))
 
 Anova(lmer(Change_ndvi_max ~ gs + (1|site), data = df_annual))
 
-df_merge <- df_annual %>% full_join(df_site)
-Anova(lm(TempMAT ~ maxNDVI, data = df_merge))
-Anova(lm(Max5moSlope ~ maxNDVI, data = SUMMARY_TABLE))
-Anova(lm(Elevation ~ maxNDVI, data = SUMMARY_TABLE))
-Anova(lm(N.deposition1993 ~ maxNDVI, data = SUMMARY_TABLE))
-Anova(lm(Richness ~ maxNDVI, data = SUMMARY_TABLE))
-Anova(lm(ObsYrMeanEven ~ maxNDVI, data = SUMMARY_TABLE))
+# df_merge <- df_annual %>% full_join(df_site)
+# Anova(lm(TempMAT ~ maxNDVI, data = df_merge))
+# Anova(lm(Max5moSlope ~ maxNDVI, data = SUMMARY_TABLE))
+# Anova(lm(Elevation ~ maxNDVI, data = SUMMARY_TABLE))
+# Anova(lm(N.deposition1993 ~ maxNDVI, data = SUMMARY_TABLE))
+# Anova(lm(Richness ~ maxNDVI, data = SUMMARY_TABLE))
+# Anova(lm(ObsYrMeanEven ~ maxNDVI, data = SUMMARY_TABLE))
 
 
 ```
+
+
+
+
+## Temporal trends
+
+The first type of analyses look at temporal trends thru time. Has the world gotten greener over time? Have green-up dates gotten earlier since the 1980's?
+
+As should have been expected, there is a lot of variation in how these metrics have changed with respect to site-level differences. 

@@ -1,7 +1,7 @@
 NutNet Phenology with NDVI
 ================
 Ellen Esch
-24 January 2021
+26 January 2021
 
 # Overview
 
@@ -27,12 +27,8 @@ dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
 process_raw_climate <- FALSE # TRUE
 
-process_raw_ndvi <- FALSE # TRUE
+process_raw_ndvi <- FALSE #TRUE
 ```
-
-And just for fun, here is a map of the sites in this analysis
-
-![](Processing-Data_files/figure-gfm/sitemap-1.png)<!-- -->
 
 ## Process weather & climate data
 
@@ -292,9 +288,637 @@ Also we set the minimum NDVI to 0 to assist in the spline fitting.
 
 ![](Processing-Data_files/figure-gfm/fittedndvi-1.png)<!-- -->
 
-# This is where csv files pulled from Git can be used
+# Filter sites which have 5 years of extracted phenological data
 
-  - Notice that NDVI and ANPP do line up pretty well, it is site
-    specific and sometimes sites don’t have that many years.
-  - To really explore trends, I’ve filtered so that sites must have
-    atleast 10 years of NDVI changes extracted
+Given that we are looking at long-term trends, it doesn’t make much
+sense to include sites which only have a minimal amount of years were we
+could extract meaninfulphenological dates. Reasons that sites might not
+have enough years include: satellites had poor coverage of location (esp
+true in earlier landsats), too much cloud cover (and thus couldn’t fit a
+nice trend/too few images during growing season), site never
+“greened-up” threshold during a given year (important esp for
+Mediterranean sites, and probably other reasons.
+
+Here is the list of sites which made the cut:
+
+    ##  [1] "abisko"    "amcamp"    "arch"      "azitwo"    "badlau"   
+    ##  [6] "bari"      "barta"     "bayr"      "bldr"      "bnbt"     
+    ## [11] "bnch"      "bogong"    "bttr"      "bunya"     "burrawan" 
+    ## [16] "burren"    "bynb"      "cbgb"      "cdcr"      "cdpt"     
+    ## [21] "chilcas"   "comp"      "cowi"      "derr"      "doane"    
+    ## [26] "elkh"      "elliot"    "elva"      "ethamc"    "frue"     
+    ## [31] "gilb"      "glac"      "glcr"      "hall"      "hart"     
+    ## [36] "hast"      "hero"      "hopl"      "jasp"      "jorn"     
+    ## [41] "kark"      "kbs"       "kibber"    "kidman"    "kilp"     
+    ## [46] "kiny"      "kirik"     "koffler"   "konz"      "lagoas"   
+    ## [51] "lake"      "lancaster" "lead"      "look"      "lubb"     
+    ## [56] "marc"      "mcdan"     "mcla"      "mitch"     "msla"     
+    ## [61] "msum"      "mtca"      "nilla"     "ping"      "pinj"     
+    ## [66] "potrok"    "sage"      "saline"    "sedg"      "sereng"   
+    ## [71] "sevi"      "sgs"       "shps"      "sier"      "smith"    
+    ## [76] "spv"       "summ"      "temple"    "ucsc"      "ukul"     
+    ## [81] "unc"       "uwo"       "valm"      "vargrass"  "vass"     
+    ## [86] "yarra"
+
+# Start to merge climate data with phenology data
+
+  - The goal is to recognize that some area have bigger temp anomolies,
+    has their phenology/productivity changed more?
+      - We can look weather windows BEFORE/during the typical green-up
+        month (here looking at the 2 month window before the typical
+        green-up date)
+      - And also do weather windows around the typical date of NDVI max
+        (here looking at a 5 month window around the typical maximum
+        ndvi date (basically the month of max ndvi + the 2 months before
+        and after from that date; this is essentially a growing season)
+
+This plot shows sites which have seen a significant warming trend in the
+green-up window.
+
+![](Processing-Data_files/figure-gfm/temptrends-1.png)<!-- -->
+
+# Make final df (2 key dataframes)
+
+`df_annual` and `df_site`
+
+``` r
+#this is site summary
+ df_site <-   (longtermsites %>% mutate(check = "included") %>% dplyr::select(site, check)) %>%
+  full_join(SiteInfo) %>%
+  full_join(climfinalstats %>%
+  filter(!is.na(site)) %>%
+  select(site, Type, Stat, Value) %>%
+  unique() %>% 
+  pivot_wider(names_from = c(Type, Stat),
+              values_from = Value) %>%
+  rename(TempTrend36yr_2mo_sos_pvalue = `anom_2mo_sos_P value`,
+         TempTrend36yr_2mo_sos_slope = anom_2mo_sos_Slope, 
+         TempTrend36yr_5mo_max_pvalue = `anom_5mo_max_P value`,
+         TempTrend36yr_5mo_max_slope = anom_5mo_max_Slope)) %>%
+  arrange(site)
+```
+
+    ## Joining, by = "site"Joining, by = "site"
+
+``` r
+#####
+#working on creating the wide data  
+tempanom_wide <- climfinalstats %>%
+  filter(Stat == "P value", !is.na(site)) %>%
+  select(Type, site, gs, TempAnom) %>%
+  unique() %>%
+  pivot_wider(names_from = Type, 
+              values_from = TempAnom) %>%
+  rename(TempAnom_2mo_sos = anom_2mo_sos,
+         TempAnom_5mo_max = anom_5mo_max)
+
+# aggregated 
+df_annual <- NutNetPheno_wide  %>%
+  full_join(tempanom_wide) %>%
+  dplyr::select(site, gs,
+                SOStypicaldate, SOSdate, ChangeSOS, TempAnom_2mo_sos,
+                MAXtypicaldate, MAXdate, ChangeMAX, TempAnom_5mo_max,
+                EOStypicaldate, EOSdate, ChangeEOS, 
+                TypicalGSL, GSLength, ChangeGSL,
+                TypicalMaxNDVI, MAXndvi, Change_ndvi_max) %>%
+  full_join(sitenpp) %>%
+  arrange(site, gs)
+```
+
+    ## Joining, by = c("site", "gs")Joining, by = c("site", "gs")
+
+``` r
+df_merge <- df_annual %>% full_join(df_site)
+```
+
+    ## Joining, by = "site"
+
+# Start analysis
+
+## Sites included in this analyses
+
+Sites included in this analyses occur across a wide range of locations
+(elevation, lat/long), soil characteristics (%C, ppmP, %N), climatic
+variables (MAP, MAT), and plant species richness.
+
+![](Processing-Data_files/figure-gfm/SiteHistogram-1.png)<!-- -->
+
+Sites also occur across contients and across different ecosystems
+(habitats). (Note, mcdan and vargrass are the sites that don’t have
+habitat information in the latest dropbox file)
+
+<table>
+
+<thead>
+
+<tr>
+
+<th style="text-align:left;">
+
+continent
+
+</th>
+
+<th style="text-align:right;">
+
+N sites
+
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td style="text-align:left;">
+
+North America
+
+</td>
+
+<td style="text-align:right;">
+
+45
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+Europe
+
+</td>
+
+<td style="text-align:right;">
+
+15
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+Australia
+
+</td>
+
+<td style="text-align:right;">
+
+13
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+South America
+
+</td>
+
+<td style="text-align:right;">
+
+6
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+Africa
+
+</td>
+
+<td style="text-align:right;">
+
+4
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+Asia
+
+</td>
+
+<td style="text-align:right;">
+
+3
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th style="text-align:left;">
+
+habitat
+
+</th>
+
+<th style="text-align:right;">
+
+N sites
+
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td style="text-align:left;">
+
+mesic grassland
+
+</td>
+
+<td style="text-align:right;">
+
+12
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+tallgrass prairie
+
+</td>
+
+<td style="text-align:right;">
+
+10
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+semiarid grassland
+
+</td>
+
+<td style="text-align:right;">
+
+9
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+annual grassland
+
+</td>
+
+<td style="text-align:right;">
+
+8
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+old field
+
+</td>
+
+<td style="text-align:right;">
+
+7
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+alpine grassland
+
+</td>
+
+<td style="text-align:right;">
+
+5
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+montane grassland
+
+</td>
+
+<td style="text-align:right;">
+
+5
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+tundra grassland
+
+</td>
+
+<td style="text-align:right;">
+
+4
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+grassland
+
+</td>
+
+<td style="text-align:right;">
+
+3
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+mixedgrass prairie
+
+</td>
+
+<td style="text-align:right;">
+
+3
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+pasture
+
+</td>
+
+<td style="text-align:right;">
+
+3
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+savanna
+
+</td>
+
+<td style="text-align:right;">
+
+3
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+shortgrass prairie
+
+</td>
+
+<td style="text-align:right;">
+
+3
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+calcareous grassland
+
+</td>
+
+<td style="text-align:right;">
+
+2
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+desert grassland
+
+</td>
+
+<td style="text-align:right;">
+
+2
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+shrub steppe
+
+</td>
+
+<td style="text-align:right;">
+
+2
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+NA
+
+</td>
+
+<td style="text-align:right;">
+
+2
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+cerrado
+
+</td>
+
+<td style="text-align:right;">
+
+1
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+grassland steppe
+
+</td>
+
+<td style="text-align:right;">
+
+1
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+salt marsh
+
+</td>
+
+<td style="text-align:right;">
+
+1
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+Here is a map of the sites:
+
+![](Processing-Data_files/figure-gfm/sitemap-1.png)<!-- -->
+
+## NDVI is an okay predictor of productivity
+
+Of course, some arguements get made that NDVI is less subject to
+bias/error than on-the-ground data collection. But the more logical
+reason for any mismatch here is that NDVI was measured *adjacent* to the
+main NutNet plots (becuase we didn’t want to capture the influence of
+nutrients during the years when nutrient additon started).
+
+Logistically, I think it makes most sense to include sites that have \>=
+3 years of biomass+ndvi data in this trend. Because it’s not reasonable
+to think that a tallgrass prairie is going to have the same ndvi-biomass
+relationship as an alpine meadow and we want to capture the site-trend.
+
+Statistically, AIC scores were compared between 4 different models
+relating maximum NDVI to ANPP. Because NDVI tends to saturate at high
+levels of biomass production, sometimes (but not always\!) ANPP is
+related to the log of the maximum NDVI. Sometimes (but not always\!) the
+relationships between NDVI and ANPP are forced through the origin (0,0)
+as zero NDVI value should indicate no biomass. All of these options were
+compared with the following models:
+
+1)  intercept thru (0,0); ANPP ~ log(maxNDVI)
+2)  intercept thru (0,0); ANPP ~ maxNDVI
+3)  no fixed interceopt; ANPP ~ log(maxNDVI)
+4)  no fixed intercept; ANPP ~ maxNDVI
+
+Model 4 had the lowest AIC score, and yields the following relationship
+with a r-squared value of `0.2691894`:
+
+ANPP = `-119.3883112` + maxNDVI \* `785.0950005`
+
+## Temporal trends
+
+The first type of analyses look at temporal trends thru time. Has the
+world gotten greener over time? Have green-up dates gotten earlier since
+the 1980’s?
+
+As should have been expected, there is a lot of variation in how these
+metrics have changed with respect to site-level differences.
