@@ -1927,6 +1927,25 @@ clim_year_soswindow <- CLIMYRS_ALL %>%
          SOS_typical_sub4 = year(TYPICALSOS - 120))  %>%
   gather(-site, -gs, -TYPICALSOS, key = "TYPE", value = "YEAR")
 
+
+ee_precip_soswindow <- full_join(clim_month_soswindow, clim_year_soswindow) %>%
+  left_join(ClimChange %>%
+            mutate(MONTH = month(plotdate),
+                   YEAR = year(plotdate))) %>%
+  select(site, gs, TYPE, PrecipDifference) %>%
+  pivot_wider(names_from = TYPE, values_from = PrecipDifference) %>%
+  rowwise() %>%
+  mutate(anom_1moPrecip = SOS_typical,
+         anom_2moPrecip = (anom_1moPrecip + SOS_typical_sub1),
+         anom_3moPrecip = anom_2moPrecip + SOS_typical_sub2,
+         anom_4moPrecip = anom_3moPrecip + SOS_typical_sub3,
+         anom_5moPrecip = anom_4moPrecip + SOS_typical_sub4) %>%
+  rename(SOSPrecip_typical = SOS_typical,
+         SOSPrecip_typical_sub1 = SOS_typical_sub1,
+         SOSPrecip_typical_sub2 = SOS_typical_sub2,
+         SOSPrecip_typical_sub3 = SOS_typical_sub3,
+         SOSPrecip_typical_sub4 = SOS_typical_sub4)
+
 ee_clim_soswindow <- full_join(clim_month_soswindow, clim_year_soswindow) %>%
   left_join(ClimChange %>%
             mutate(MONTH = month(plotdate),
@@ -1934,12 +1953,13 @@ ee_clim_soswindow <- full_join(clim_month_soswindow, clim_year_soswindow) %>%
   select(site, gs, TYPE, TempDifference) %>%
   pivot_wider(names_from = TYPE, values_from = TempDifference) %>%
   rowwise() %>%
-  mutate(anom_1mo = SOS_typical,
-         anom_2mo = (anom_1mo + SOS_typical_sub1),
-         anom_3mo = anom_2mo + SOS_typical_sub2,
-         anom_4mo = anom_3mo + SOS_typical_sub3,
-         anom_5mo = anom_4mo + SOS_typical_sub4) %>%
-  full_join(NutNetPheno_wide)
+  mutate(anom_1moTemp = SOS_typical,
+         anom_2moTemp = (anom_1moTemp + SOS_typical_sub1),
+         anom_3moTemp = anom_2moTemp + SOS_typical_sub2,
+         anom_4moTemp = anom_3moTemp + SOS_typical_sub3,
+         anom_5moTemp = anom_4moTemp + SOS_typical_sub4) %>%
+  full_join(NutNetPheno_wide) %>%
+  full_join(ee_precip_soswindow)
 
 
 #####
@@ -1972,6 +1992,30 @@ clim_year_maxwindow <- CLIMYRS_ALL %>%
          MAX_typical_plus4 = year(TYPICALMAX + 120))  %>%
   gather(-site, -gs, -TYPICALMAX, key = "TYPE", value = "YEAR")
 
+ee_precip_maxwindow <- full_join(clim_month_maxwindow, clim_year_maxwindow) %>%
+  left_join(ClimChange %>%
+            mutate(MONTH = month(plotdate),
+                   YEAR = year(plotdate))) %>%
+  select(site, gs, TYPE, PrecipDifference) %>%
+  pivot_wider(names_from = TYPE, values_from = PrecipDifference) %>%
+  rowwise() %>%
+  mutate(anom_1moPrecip = MAX_typical, 
+         anom_3moPrecip = (MAX_typical + MAX_typical_sub1 + MAX_typical_plus1),
+         anom_5moPrecip = anom_3moPrecip + MAX_typical_sub2 + MAX_typical_plus2,
+         anom_7moPrecip = anom_5moPrecip + MAX_typical_sub3 + MAX_typical_plus3,
+         anom_9moPrecip = anom_7moPrecip + MAX_typical_sub4 + MAX_typical_plus4) %>%
+  rename(MAXPrecip_typical = MAX_typical,
+         MAXPrecip_typical = MAX_typical,
+         MAXPrecip_typical_sub1 = MAX_typical_sub1,
+         MAXPrecip_typical_plus1 = MAX_typical_plus1,
+         MAXPrecip_typical_sub2 = MAX_typical_sub2,
+         MAXPrecip_typical_plus2 = MAX_typical_plus2,
+         MAXPrecip_typical_sub3 = MAX_typical_sub3,
+         MAXPrecip_typical_plus3 = MAX_typical_plus3,
+         MAXPrecip_typical_sub4 = MAX_typical_sub4,
+         MAXPrecip_typical_plus4 = MAX_typical_plus4)
+
+
 ee_clim_maxwindow <- full_join(clim_month_maxwindow, clim_year_maxwindow) %>%
   left_join(ClimChange %>%
             mutate(MONTH = month(plotdate),
@@ -1979,14 +2023,16 @@ ee_clim_maxwindow <- full_join(clim_month_maxwindow, clim_year_maxwindow) %>%
   select(site, gs, TYPE, TempDifference) %>%
   pivot_wider(names_from = TYPE, values_from = TempDifference) %>%
   rowwise() %>%
-  mutate(anom_1mo = MAX_typical, 
-         anom_3mo = (MAX_typical + MAX_typical_sub1 + MAX_typical_plus1),
-         anom_5mo = anom_3mo + MAX_typical_sub2 + MAX_typical_plus2,
-         anom_7mo = anom_5mo + MAX_typical_sub3 + MAX_typical_plus3,
-         anom_9mo = anom_7mo + MAX_typical_sub4 + MAX_typical_plus4) %>%
-  full_join(NutNetPheno_wide) #%>%
+  mutate(anom_1moTemp = MAX_typical, 
+         anom_3moTemp = (MAX_typical + MAX_typical_sub1 + MAX_typical_plus1),
+         anom_5moTemp = anom_3moTemp + MAX_typical_sub2 + MAX_typical_plus2,
+         anom_7moTemp = anom_5moTemp + MAX_typical_sub3 + MAX_typical_plus3,
+         anom_9moTemp = anom_7moTemp + MAX_typical_sub4 + MAX_typical_plus4) %>%
+  full_join(ee_precip_maxwindow) %>%
+  full_join(NutNetPheno_wide)  #%>%
   # mutate(TypicalGSL = EOStypicaldate - SOStypicaldate,
          # ChangeGSL = GSLength - TypicalGSL)
+
 
 
 ###
@@ -1994,140 +2040,228 @@ ee_clim_maxwindow <- full_join(clim_month_maxwindow, clim_year_maxwindow) %>%
 ###
 climdataframe <- tibble(
   site = numeric(), 
-  sos1moF = numeric(), sos1moP = numeric(),
-  sos2moF = numeric(), sos2moP = numeric(), sos2moSLOPE = numeric(),
-  sos3moF = numeric(), sos3moP = numeric(),
-  sos4moF = numeric(), sos4moP = numeric(),
-  max1moF = numeric(), max1moP = numeric(),
-  max3moF = numeric(), max3moP = numeric(),
-  max5moF = numeric(), max5moP = numeric(), max5moSLOPE = numeric(),
-  max7moF = numeric(), max7moP = numeric(),
-  max9moF = numeric(), max9moP = numeric())
+  sos1moTempF = numeric(), sos1moTempP = numeric(),
+  sos2moTempF = numeric(), sos2moTempP = numeric(), sos2moTempSLOPE = numeric(),
+  sos3moTempF = numeric(), sos3moTempP = numeric(),
+  sos4moTempF = numeric(), sos4moTempP = numeric(),
+  max1moTempF = numeric(), max1moTempP = numeric(),
+  max3moTempF = numeric(), max3moTempP = numeric(),
+  max5moTempF = numeric(), max5moTempP = numeric(), max5moTempSLOPE = numeric(),
+  max7moTempF = numeric(), max7moTempP = numeric(),
+  max9moTempF = numeric(), max9moTempP = numeric(),
+    
+  sos1moPrecipF = numeric(), sos1moPrecipP = numeric(),
+  sos2moPrecipF = numeric(), sos2moPrecipP = numeric(), sos2moPrecipSLOPE = numeric(),
+  sos3moPrecipF = numeric(), sos3moPrecipP = numeric(),
+  sos4moPrecipF = numeric(), sos4moPrecipP = numeric(),
+  max1moPrecipF = numeric(), max1moPrecipP = numeric(),
+  max3moPrecipF = numeric(), max3moPrecipP = numeric(),
+  max5moPrecipF = numeric(), max5moPrecipP = numeric(), max5moPrecipSLOPE = numeric(),
+  max7moPrecipF = numeric(), max7moPrecipP = numeric(),
+  max9moPrecipF = numeric(), max9moPrecipP = numeric())
 
 climate_anom <- ee_clim_maxwindow %>%
-  select(site, gs, anom_1mo, anom_3mo, anom_5mo, anom_7mo, anom_9mo) %>%
-  gather(-site, -gs, key = Type, value = TempAnom) %>%
+  select(site, gs, anom_1moTemp, anom_3moTemp, anom_5moTemp, anom_7moTemp, anom_9moTemp, 
+         anom_1moPrecip, anom_3moPrecip, anom_5moPrecip, anom_7moPrecip, anom_9moPrecip) %>%
+  gather(-site, -gs, key = Type, value = Anomaly) %>%
   mutate(Type = paste0(Type, "_max")) %>%
   bind_rows( ee_clim_soswindow %>%
-               select(site, gs, anom_1mo, anom_2mo, anom_3mo, anom_4mo, anom_5mo) %>%
-               gather(-site, -gs, key = Type, value = TempAnom) %>%
+               select(site, gs, anom_1moTemp, anom_2moTemp, anom_3moTemp, anom_4moTemp, anom_5moTemp,
+                      anom_1moPrecip, anom_2moPrecip, anom_3moPrecip, anom_4moPrecip, anom_5moPrecip) %>%
+               gather(-site, -gs, key = Type, value = Anomaly) %>%
                mutate(Type = paste0(Type, "_sos"))) %>%
-  full_join(longtermsites) %>% 
-  select(-sitenum)
-
-statsdataframe <- tibble(
-  site = numeric(), 
-  sosF = numeric(), sosP = numeric(), sosSLOPE = numeric(),
-  eosF = numeric(), eosP = numeric(), 
-  gslF = numeric(), gslP = numeric(), gslSLOPE = numeric(), 
-  maxndviF = numeric(), maxndviP = numeric(), maxNDVISLOPE = numeric())
-
+  full_join(longtermsites) %>% select(-sitenum)
 
 clim_statssite_summary <- climdataframe
 for (i in c(1:nrow(longtermsites))) {
   a <- i
   sitefilter <- climate_anom %>% filter(sitenum2 == a)
   
-  max1mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {
-    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_1mo_max')))
-  } else {max1mo_mod <- statsdataframe}
-  max1moF <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {Anova(max1mo_mod)$`F value`[1]} else {NA}
-  max1moP <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_max')) > 2) {Anova(max1mo_mod)$`Pr(>F)`[1]} else {NA}
+  max1moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_1moTemp_max')) > 2) {
+    (lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_1moTemp_max')))
+  } else {max1moTemp_mod <- statsdataframe}
+  max1moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_1moTemp_max')) > 2) {Anova(max1moTemp_mod)$`F value`[1]} else {NA}
+  max1moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_1moTemp_max')) > 2) {Anova(max1moTemp_mod)$`Pr(>F)`[1]} else {NA}
   
-  max3mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {
-    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_3mo_max')))
-  } else {max3mo_mod <- statsdataframe}
-  max3moF <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {max3mo_mod$`F value`[1]} else {NA}
-  max3moP <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_max')) > 2) {max3mo_mod$`Pr(>F)`[1]} else {NA}
+  max3moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_3moTemp_max')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_3moTemp_max')))
+  } else {max3moTemp_mod <- statsdataframe}
+  max3moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_3moTemp_max')) > 2) {max3moTemp_mod$`F value`[1]} else {NA}
+  max3moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_3moTemp_max')) > 2) {max3moTemp_mod$`Pr(>F)`[1]} else {NA}
 
-  max5mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {
-    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_5mo_max')))
-  } else {max5mo_mod <- statsdataframe}
-  max5moF <-   if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {Anova(max5mo_mod)$`F value`[1]} else {NA}
-  max5moP <-   if (nrow(filter(sitefilter, Type == 'anom_5mo_max')) > 2) {Anova(max5mo_mod)$`Pr(>F)`[1]} else {NA}
-  max5moSLOPE <- if (nrow(filter(sitefilter, Type == "anom_5mo_max")) > 2) { max5mo_mod$coefficients[2] } else {NA}
+  max5moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_5moTemp_max')) > 2) {
+    (lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_5moTemp_max')))
+  } else {max5moTemp_mod <- statsdataframe}
+  max5moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_5moTemp_max')) > 2) {Anova(max5moTemp_mod)$`F value`[1]} else {NA}
+  max5moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_5moTemp_max')) > 2) {Anova(max5moTemp_mod)$`Pr(>F)`[1]} else {NA}
+  max5moTempSLOPE <- if (nrow(filter(sitefilter, Type == "anom_5moTemp_max")) > 2) { max5moTemp_mod$coefficients[2] } else {NA}
 
-  max7mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {
-    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_7mo_max')))
-  } else {max7mo_mod <- statsdataframe}
-  max7moF <-   if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {max7mo_mod$`F value`[1]} else {NA}
-  max7moP <-   if (nrow(filter(sitefilter, Type == 'anom_7mo_max')) > 2) {max7mo_mod$`Pr(>F)`[1]} else {NA}
+  max7moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_7moTemp_max')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_7moTemp_max')))
+  } else {max7moTemp_mod <- statsdataframe}
+  max7moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_7moTemp_max')) > 2) {max7moTemp_mod$`F value`[1]} else {NA}
+  max7moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_7moTemp_max')) > 2) {max7moTemp_mod$`Pr(>F)`[1]} else {NA}
 
-  max9mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {
-    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_9mo_max')))
-  } else {max9mo_mod <- statsdataframe}
-  max9moF <-   if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {max9mo_mod$`F value`[1]} else {NA}
-  max9moP <-   if (nrow(filter(sitefilter, Type == 'anom_9mo_max')) > 2) {max9mo_mod$`Pr(>F)`[1]} else {NA}
+  max9moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_9moTemp_max')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_9moTemp_max')))
+  } else {max9moTemp_mod <- statsdataframe}
+  max9moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_9moTemp_max')) > 2) {max9moTemp_mod$`F value`[1]} else {NA}
+  max9moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_9moTemp_max')) > 2) {max9moTemp_mod$`Pr(>F)`[1]} else {NA}
 
-  sos1mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {
-    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_1mo_sos')))
-  } else {sos1mo_mod <- statsdataframe}
-  sos1moF <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {sos1mo_mod$`F value`[1]} else {NA}
-  sos1moP <-   if (nrow(filter(sitefilter, Type == 'anom_1mo_sos')) > 2) {sos1mo_mod$`Pr(>F)`[1]} else {NA}
+  sos1moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_1moTemp_sos')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_1moTemp_sos')))
+  } else {sos1moTemp_mod <- statsdataframe}
+  sos1moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_1moTemp_sos')) > 2) {sos1moTemp_mod$`F value`[1]} else {NA}
+  sos1moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_1moTemp_sos')) > 2) {sos1moTemp_mod$`Pr(>F)`[1]} else {NA}
         
-  sos2mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {
-    (lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_2mo_sos')))
-  } else {sos2mo_mod <- statsdataframe}
-  sos2moF <-   if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {Anova(sos2mo_mod)$`F value`[1]} else {NA}
-  sos2moP <-   if (nrow(filter(sitefilter, Type == 'anom_2mo_sos')) > 2) {Anova(sos2mo_mod)$`Pr(>F)`[1]} else {NA}
-  sos2moSLOPE <- if (nrow(filter(sitefilter, Type == "anom_2mo_sos")) > 2) { sos2mo_mod$coefficients[2] } else {NA}
+  sos2moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_2moTemp_sos')) > 2) {
+    (lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_2moTemp_sos')))
+  } else {sos2moTemp_mod <- statsdataframe}
+  sos2moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_2moTemp_sos')) > 2) {Anova(sos2moTemp_mod)$`F value`[1]} else {NA}
+  sos2moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_2moTemp_sos')) > 2) {Anova(sos2moTemp_mod)$`Pr(>F)`[1]} else {NA}
+  sos2moTempSLOPE <- if (nrow(filter(sitefilter, Type == "anom_2moTemp_sos")) > 2) { sos2moTemp_mod$coefficients[2] } else {NA}
         
-  sos3mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {
-    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_3mo_sos')))
-  } else {sos3mo_mod <- statsdataframe}
-  sos3moF <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {sos3mo_mod$`F value`[1]} else {NA}
-  sos3moP <-   if (nrow(filter(sitefilter, Type == 'anom_3mo_sos')) > 2) {sos3mo_mod$`Pr(>F)`[1]} else {NA}
+  sos3moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_3moTemp_sos')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_3moTemp_sos')))
+  } else {sos3moTemp_mod <- statsdataframe}
+  sos3moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_3moTemp_sos')) > 2) {sos3moTemp_mod$`F value`[1]} else {NA}
+  sos3moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_3moTemp_sos')) > 2) {sos3moTemp_mod$`Pr(>F)`[1]} else {NA}
         
-  sos4mo_mod<-if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {
-    Anova(lm(TempAnom ~ gs, data = filter(sitefilter, Type == 'anom_4mo_sos')))
-  } else {sos4mo_mod <- statsdataframe}
-  sos4moF <-   if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {sos4mo_mod$`F value`[1]} else {NA}
-  sos4moP <-   if (nrow(filter(sitefilter, Type == 'anom_4mo_sos')) > 2) {sos4mo_mod$`Pr(>F)`[1]} else {NA}
+  sos4moTemp_mod<-if (nrow(filter(sitefilter, Type == 'anom_4moTemp_sos')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_4moTemp_sos')))
+  } else {sos4moTemp_mod <- statsdataframe}
+  sos4moTempF <-   if (nrow(filter(sitefilter, Type == 'anom_4moTemp_sos')) > 2) {sos4moTemp_mod$`F value`[1]} else {NA}
+  sos4moTempP <-   if (nrow(filter(sitefilter, Type == 'anom_4moTemp_sos')) > 2) {sos4moTemp_mod$`Pr(>F)`[1]} else {NA}
+  
+  
+  #do precip
+  
+  max1moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_1moPrecip_max')) > 2) {
+    (lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_1moPrecip_max')))
+  } else {max1moPrecip_mod <- statsdataframe}
+  max1moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_1moPrecip_max')) > 2) {Anova(max1moPrecip_mod)$`F value`[1]} else {NA}
+  max1moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_1moPrecip_max')) > 2) {Anova(max1moPrecip_mod)$`Pr(>F)`[1]} else {NA}
+  
+  max3moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_3moPrecip_max')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_3moPrecip_max')))
+  } else {max3moPrecip_mod <- statsdataframe}
+  max3moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_3moPrecip_max')) > 2) {max3moPrecip_mod$`F value`[1]} else {NA}
+  max3moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_3moPrecip_max')) > 2) {max3moPrecip_mod$`Pr(>F)`[1]} else {NA}
+
+  max5moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_5moPrecip_max')) > 2) {
+    (lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_5moPrecip_max')))
+  } else {max5moPrecip_mod <- statsdataframe}
+  max5moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_5moPrecip_max')) > 2) {Anova(max5moPrecip_mod)$`F value`[1]} else {NA}
+  max5moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_5moPrecip_max')) > 2) {Anova(max5moPrecip_mod)$`Pr(>F)`[1]} else {NA}
+  max5moPrecipSLOPE <- if (nrow(filter(sitefilter, Type == "anom_5moPrecip_max")) > 2) { max5moPrecip_mod$coefficients[2] } else {NA}
+
+  max7moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_7moPrecip_max')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_7moPrecip_max')))
+  } else {max7moPrecip_mod <- statsdataframe}
+  max7moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_7moPrecip_max')) > 2) {max7moPrecip_mod$`F value`[1]} else {NA}
+  max7moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_7moPrecip_max')) > 2) {max7moPrecip_mod$`Pr(>F)`[1]} else {NA}
+
+  max9moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_9moPrecip_max')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_9moPrecip_max')))
+  } else {max9moPrecip_mod <- statsdataframe}
+  max9moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_9moPrecip_max')) > 2) {max9moPrecip_mod$`F value`[1]} else {NA}
+  max9moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_9moPrecip_max')) > 2) {max9moPrecip_mod$`Pr(>F)`[1]} else {NA}
+
+  sos1moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_1moPrecip_sos')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_1moPrecip_sos')))
+  } else {sos1moPrecip_mod <- statsdataframe}
+  sos1moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_1moPrecip_sos')) > 2) {sos1moPrecip_mod$`F value`[1]} else {NA}
+  sos1moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_1moPrecip_sos')) > 2) {sos1moPrecip_mod$`Pr(>F)`[1]} else {NA}
+        
+  sos2moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_2moPrecip_sos')) > 2) {
+    (lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_2moPrecip_sos')))
+  } else {sos2moPrecip_mod <- statsdataframe}
+  sos2moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_2moPrecip_sos')) > 2) {Anova(sos2moPrecip_mod)$`F value`[1]} else {NA}
+  sos2moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_2moPrecip_sos')) > 2) {Anova(sos2moPrecip_mod)$`Pr(>F)`[1]} else {NA}
+  sos2moPrecipSLOPE <- if (nrow(filter(sitefilter, Type == "anom_2moPrecip_sos")) > 2) { sos2moPrecip_mod$coefficients[2] } else {NA}
+        
+  sos3moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_3moPrecip_sos')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_3moPrecip_sos')))
+  } else {sos3moPrecip_mod <- statsdataframe}
+  sos3moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_3moPrecip_sos')) > 2) {sos3moPrecip_mod$`F value`[1]} else {NA}
+  sos3moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_3moPrecip_sos')) > 2) {sos3moPrecip_mod$`Pr(>F)`[1]} else {NA}
+        
+  sos4moPrecip_mod<-if (nrow(filter(sitefilter, Type == 'anom_4moPrecip_sos')) > 2) {
+    Anova(lm(Anomaly ~ gs, data = filter(sitefilter, Type == 'anom_4moPrecip_sos')))
+  } else {sos4moPrecip_mod <- statsdataframe}
+  sos4moPrecipF <-   if (nrow(filter(sitefilter, Type == 'anom_4moPrecip_sos')) > 2) {sos4moPrecip_mod$`F value`[1]} else {NA}
+  sos4moPrecipP <-   if (nrow(filter(sitefilter, Type == 'anom_4moPrecip_sos')) > 2) {sos4moPrecip_mod$`Pr(>F)`[1]} else {NA}
+  
         
   CLIMstats <- tibble(a, 
-                  sos1moF, sos1moP,
-                  sos2moF, sos2moP, sos2moSLOPE, 
-                  sos3moF, sos3moP,
-                  sos4moF, sos4moP,
-                  max1moF, max1moP,
-                  max3moF, max3moP,
-                  max5moF, max5moP, max5moSLOPE, 
-                  max7moF, max7moP,
-                  max9moF, max9moP)
+                  sos1moTempF, sos1moTempP,
+                  sos2moTempF, sos2moTempP, sos2moTempSLOPE, 
+                  sos3moTempF, sos3moTempP,
+                  sos4moTempF, sos4moTempP,
+                  max1moTempF, max1moTempP,
+                  max3moTempF, max3moTempP,
+                  max5moTempF, max5moTempP, max5moTempSLOPE, 
+                  max7moTempF, max7moTempP,
+                  max9moTempF, max9moTempP,
+                  
+                  sos1moPrecipF, sos1moPrecipP,
+                  sos2moPrecipF, sos2moPrecipP, sos2moPrecipSLOPE, 
+                  sos3moPrecipF, sos3moPrecipP,
+                  sos4moPrecipF, sos4moPrecipP,
+                  max1moPrecipF, max1moPrecipP,
+                  max3moPrecipF, max3moPrecipP,
+                  max5moPrecipF, max5moPrecipP, max5moPrecipSLOPE, 
+                  max7moPrecipF, max7moPrecipP,
+                  max9moPrecipF, max9moPrecipP)
   clim_statssite_summary <- rbind (CLIMstats, clim_statssite_summary)
 }
 
-climfinalstats <- (dplyr::select(clim_statssite_summary, a,  sos1moF, sos2moF,sos3moF, sos4moF, 
-                                 max1moF, max3moF, max5moF, max7moF,max9moF) %>% 
+climfinalstats <- (dplyr::select(clim_statssite_summary, a,  sos1moTempF, sos2moTempF,sos3moTempF, sos4moTempF, 
+                                    sos1moPrecipF, sos2moPrecipF,sos3moPrecipF, sos4moPrecipF, 
+                                 max1moTempF, max3moTempF, max5moTempF, max7moTempF,max9moTempF,
+                                    max1moPrecipF, max3moPrecipF, max5moPrecipF, max7moPrecipF,max9moPrecipF) %>% 
                      gather(Type, Value, -a) %>% 
                      mutate(Stat = 'F value')) %>%
-  bind_rows((dplyr::select(clim_statssite_summary, a, sos1moP, sos2moP,sos3moP, sos4moP, max1moP, max3moP, max5moP, max7moP,max9moP) %>% 
+  bind_rows((dplyr::select(clim_statssite_summary, a, sos1moTempP, sos2moTempP,sos3moTempP, sos4moTempP, 
+                           max1moTempP, max3moTempP, max5moTempP, max7moTempP,max9moTempP,
+                           sos1moPrecipP, sos2moPrecipP,sos3moPrecipP, sos4moPrecipP, 
+                           max1moPrecipP, max3moPrecipP, max5moPrecipP, max7moPrecipP,max9moPrecipP) %>% 
                gather(Type, Value, -a) %>% 
                mutate(Stat = 'P value'))) %>%
-  bind_rows(select(clim_statssite_summary, a, max5moSLOPE, sos2moSLOPE) %>%
+  bind_rows(select(clim_statssite_summary, a, max5moTempSLOPE, sos2moTempSLOPE, 
+                   max5moPrecipSLOPE, sos2moPrecipSLOPE) %>%
               gather(Type, Value, -a) %>%
               mutate(Stat = "Slope")) %>%
   rename(sitenum2 = a) %>%
-  mutate(Type = recode(Type, "sos1moF" = "anom_1mo_sos", "sos1moP" = "anom_1mo_sos",
-                       "sos2moF" = "anom_2mo_sos", "sos2moP" = "anom_2mo_sos", "sos2moSLOPE" = "anom_2mo_sos",
-                       "sos3moF" = "anom_3mo_sos", "sos3moP" = "anom_3mo_sos",
-                       "sos4moF" = "anom_4mo_sos", "sos4moP" = "anom_4mo_sos",
-                       "max1moF" = "anom_1mo_max", "max1moP" = "anom_1mo_max",
-                       "max3moF" = "anom_3mo_max", "max3moP" = "anom_3mo_max",
-                       "max5moF" = "anom_5mo_max", "max5moP" = "anom_5mo_max", "max5moSLOPE" = "anom_5mo_max",
-                       "max7moF" = "anom_7mo_max", "max7moP" = "anom_7mo_max",
-                       "max9moF" = "anom_9mo_max", "max9moP" = "anom_9mo_max")) %>%
-  full_join(longtermsites)  %>% 
-  dplyr::select(-sitenum, -sitenum2) %>%
+  mutate(Type = recode(Type, "sos1moTempF" = "anom_1moTemp_sos", "sos1moTempP" = "anom_1moTemp_sos",
+                       "sos2moTempF" = "anom_2moTemp_sos", "sos2moTempP" = "anom_2moTemp_sos", "sos2moTempSLOPE" = "anom_2moTemp_sos",
+                       "sos3moTempF" = "anom_3moTemp_sos", "sos3moTempP" = "anom_3moTemp_sos",
+                       "sos4moTempF" = "anom_4moTemp_sos", "sos4moTempP" = "anom_4moTemp_sos",
+                       "max1moTempF" = "anom_1moTemp_max", "max1moTempP" = "anom_1moTemp_max",
+                       "max3moTempF" = "anom_3moTemp_max", "max3moTempP" = "anom_3moTemp_max",
+                       "max5moTempF" = "anom_5moTemp_max", "max5moTempP" = "anom_5moTemp_max", "max5moTempSLOPE" = "anom_5moTemp_max",
+                       "max7moTempF" = "anom_7moTemp_max", "max7moTempP" = "anom_7moTemp_max",
+                       "max9moTempF" = "anom_9moTemp_max", "max9moTempP" = "anom_9moTemp_max",
+                       
+                       "sos1moPrecipF" = "anom_1moPrecip_sos", "sos1moPrecipP" = "anom_1moPrecip_sos",
+                       "sos2moPrecipF" = "anom_2moPrecip_sos", "sos2moPrecipP" = "anom_2moPrecip_sos", "sos2moPrecipSLOPE" = "anom_2moPrecip_sos",
+                       "sos3moPrecipF" = "anom_3moPrecip_sos", "sos3moPrecipP" = "anom_3moPrecip_sos",
+                       "sos4moPrecipF" = "anom_4moPrecip_sos", "sos4moPrecipP" = "anom_4moPrecip_sos",
+                       "max1moPrecipF" = "anom_1moPrecip_max", "max1moPrecipP" = "anom_1moPrecip_max",
+                       "max3moPrecipF" = "anom_3moPrecip_max", "max3moPrecipP" = "anom_3moPrecip_max",
+                       "max5moPrecipF" = "anom_5moPrecip_max", "max5moPrecipP" = "anom_5moPrecip_max", "max5moPrecipSLOPE" = "anom_5moPrecip_max",
+                       "max7moPrecipF" = "anom_7moPrecip_max", "max7moPrecipP" = "anom_7moPrecip_max",
+                       "max9moPrecipF" = "anom_9moPrecip_max", "max9moPrecipP" = "anom_9moPrecip_max")) %>%
+  full_join((longtermsites %>% select(-sitenum)))  %>% 
+  dplyr::select(-sitenum2) %>%
   full_join(climate_anom) %>%
   mutate(includeCHANGE = ifelse(Stat == 'P value' & Value <= 0.05, 'sig', 'ns')) %>%
-  filter(Stat != "F value") %>%
-  filter(Type == "anom_2mo_sos" | Type == "anom_5mo_max")
+  filter(Stat != "F value")
 
-
+## make some example figs
 climfinalstats %>%
-  filter(includeCHANGE == 'sig', Type == 'anom_2mo_sos', Stat == "P value") %>%
-  ggplot(aes(x = gs, y = TempAnom)) +
+  filter(includeCHANGE == 'sig', Type == 'anom_2moTemp_sos', Stat == "P value") %>%
+  ggplot(aes(x = gs, y = Anomaly)) +
   geom_hline(yintercept = 0, lty = 2)+
   geom_point() +
   geom_smooth(method='lm', fill=NA, col='black')+
@@ -2135,23 +2269,15 @@ climfinalstats %>%
   theme_cowplot() +
   labs(x='Growing Season', y='SOS temp anom \n(2-mo window around typical SOS)')
 
-
-# climfinalstats %>%
-#   filter(includeCHANGE == 'sig', Type == 'anom_5mo_max', Stat == "P value") %>%
-#   ggplot(aes(x = gs, y = TempAnom)) +
-#   geom_hline(yintercept = 0, lty = 2)+
-#   geom_point() +
-#   geom_smooth(method='lm', fill=NA, col='black')+
-#   facet_wrap(~site) +
-#   theme_cowplot() +
-#   labs(x='Growing Season', y='GS Temp anom \n(5-mo window around typical MAX)')
-
-# #example of a site that doesnt change
-# climfinalstats %>%
-#   filter(site == "potrok", 
-#          Type == "anom_1mo_sos") %>%
-#   ggplot(aes(x = gs, y = TempAnom)) + 
-#   geom_point()
+climfinalstats %>%
+  filter(includeCHANGE == 'sig', Type == 'anom_2moPrecip_sos', Stat == "P value") %>%
+  ggplot(aes(x = gs, y = Anomaly)) +
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_point() +
+  geom_smooth(method='lm', fill=NA, col='black')+
+  facet_wrap(~site) +
+  theme_cowplot() +
+  labs(x='Growing Season', y='SOS precip anom \n(2-mo window around typical SOS)')
 
 
 ```
