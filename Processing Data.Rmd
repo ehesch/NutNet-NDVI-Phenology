@@ -47,7 +47,7 @@ dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
 process_raw_climate <- FALSE # TRUE
 
-process_raw_ndvi <- FALSE # TRUE
+process_raw_ndvi <- TRUE
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -495,13 +495,12 @@ siteclim <- dropbox %>%
     SoilN = mean(pct_N, na.rm = T),
     SoilP = mean(ppm_P, na.rm = T),
     SoilK = mean(ppm_K, na.rm = T)
-  ) %>%
-  filter(!is.na(Richness))
+  )
 
 
 obsyr_even <- dropbox %>%
   filter((year == (first_nutrient_year - 1)) | experiment_type == "Observational") %>%
-  group_by(site_code) %>% # filter(site_code == "lagoas.br")
+  group_by(site_code) %>%
   summarise(
     ObsYrMeanEven = mean(evenness, na.rm = T),
     ObsYrMeanInvSimp = mean(inverse_simpson, na.rm = T)
@@ -515,7 +514,8 @@ obsyr_even <- dropbox %>%
 
 region <- dropbox %>%
   separate(site_code, into = c("site", "country"), sep = "[.]") %>%
-  dplyr::select(site, continent, habitat, latitude, longitude)
+  dplyr::select(site, continent, habitat) %>%
+  unique()
 
 SiteInfo <- ndep %>%
   left_join(region) %>%
@@ -534,11 +534,11 @@ sitenpp1 <- dropbox %>%
   filter(trt == "Control") %>%
   group_by(site, year) %>%
   summarise(
-    ANPP = mean(live_mass, na.rm = T),
-    sdANPP = sd(live_mass, na.rm = T)
+    ANPP_control = mean(live_mass, na.rm = T),
+    sdANPP_control = sd(live_mass, na.rm = T)
   ) %>%
   rename(gs = year) %>%
-  filter(!is.na(sdANPP))
+  filter(!is.na(sdANPP_control))
 
 sitenpp <- sitenpp1 %>%
   group_by(site) %>%
@@ -1722,8 +1722,8 @@ NutNetPheno_long <- redial %>%
   rename(DaysFromAvg = DIFFERENCE) %>%
   arrange(site, gs, Type) %>%
   dplyr::select(-Max50, -Start, -End) %>%
-  mutate(Change_ndvi_max = ifelse(Type =="max", (ndvi - avg_ndvi_max), NA)) %>%
-  dplyr::select(-avg_ndvi_max)
+  mutate(Change_ndvi_max = ifelse(Type =="max", (ndvi - avg_ndvi_max), NA)) #%>%
+  # dplyr::select(-avg_ndvi_max)
 
 NutNetPheno_long %>% 
   filter(site == "glac", Type == "green-up date") %>%
@@ -1748,7 +1748,35 @@ write.csv(NutNetPheno_long, "NutNetPheno_long.csv")
   print("not processing raw NDVI data")
 }
 
-NutNetPheno_long <- read_csv("./NutNetPheno_long.csv")
+NutNetPheno_long <- read_csv("./NutNetPheno_long.csv", col_type = cols())
+
+NutNetPheno_wide <- NutNetPheno_long %>%
+  dplyr::select(site, gs, Type, DaysFromAvg) %>%
+  spread(Type, DaysFromAvg) %>%
+  rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, ndvi) %>%
+              spread(Type, ndvi) %>%
+              rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, gs, Type, Date) %>%
+              spread(Type, Date) %>%
+              mutate(GSLength = `senescence date` - `green-up date`) %>%
+              rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
+  full_join(NutNetPheno_long %>%
+              dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
+              filter(Type!= "gsl") %>%
+              pivot_wider(names_from = Type, values_from = TypicalDate) %>%
+              rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
+              mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
+  full_join(NutNetPheno_long %>%
+              group_by(site) %>%
+              summarise("TypicalMaxNDVI" = mean(avg_ndvi_max))) %>%
+  mutate(ChangeGSL = GSLength - TypicalGSL) %>%
+  filter(!is.na(GSLength)) %>%
+  full_join(NutNetPheno_long %>%
+              filter(Type == "max") %>%
+              dplyr::select(site, gs, Change_ndvi_max))
 
 ```
 
@@ -1809,33 +1837,6 @@ write.csv(allfittedndvi, "allfittedndvi.csv")
 
 allfittedndvi <- read_csv("./allfittedndvi.csv")
 
-NutNetPheno_wide <- NutNetPheno_long %>%
-  dplyr::select(site, gs, Type, DaysFromAvg) %>%
-  spread(Type, DaysFromAvg) %>%
-  rename(ChangeSOS = `green-up date`, ChangeMAX = max, ChangeEOS = `senescence date`) %>% #, ChangeGSL = gsl) %>%
-  full_join(NutNetPheno_long %>%
-              dplyr::select(site, gs, Type, ndvi) %>%
-              spread(Type, ndvi) %>%
-              # select(-gsl) %>%
-              rename(SOSndvi = `green-up date`, MAXndvi = max, EOSndvi = `senescence date`)) %>%
-  full_join(NutNetPheno_long %>%
-              dplyr::select(site, gs, Type, Date) %>%
-              spread(Type, Date) %>%
-              #select(-gsl) %>%
-              mutate(GSLength = `senescence date` - `green-up date`) %>%
-              rename(SOSdate = `green-up date`, MAXdate = max, EOSdate = `senescence date`)) %>%
-  full_join(NutNetPheno_long %>%
-              dplyr::select(site, sitenum, gs, Type, TypicalDate) %>%
-              filter(Type!= "gsl") %>%
-              pivot_wider(names_from = Type, values_from = TypicalDate) %>%
-              rename(SOStypicaldate = `green-up date`, MAXtypicaldate = max, EOStypicaldate = `senescence date`) %>%
-              mutate(TypicalGSL = EOStypicaldate - SOStypicaldate)) %>%
-  mutate(ChangeGSL = GSLength - TypicalGSL) %>%
-  filter(!is.na(GSLength)) %>%
-  full_join(NutNetPheno_long %>%
-              filter(Type == "max") %>%
-              dplyr::select(site, gs, Change_ndvi_max))
-
 #make a test figure
 test = "elliot" #comp
 grow = 1980
@@ -1853,7 +1854,7 @@ grow = 1980
 ```
 
 
-# Filter sites with <10 years of NDVI data
+# Filter sites which have X years of NDVI data
 
 Given that we are looking at long-term trends, it doesn't make much sense to include sites which only have a minimal amount of years were we could extract meaninfulphenological dates. Reasons that sites might not have enough years include: satellites had poor coverage of location (esp true in earlier landsats), too much cloud cover (and thus couldn't fit a nice trend/too few images during growing season), site never "greened-up" threshold during a given year (important esp for Mediterranean sites, and probably other reasons.
 
@@ -1862,12 +1863,13 @@ longtermsites <- NutNetPheno_wide %>%
   filter(!is.na(GSLength)) %>%
   group_by(site) %>%
   summarise(N = n()) %>%
-  filter(N>=10) %>%
+  filter(N>=5) %>%
   select(-N) %>%
   filter(site %in% SiteInfo$site) %>%
   inner_join(NutNetPheno_long %>%
                group_by(site) %>%
-               summarise(sitenum = mean(sitenum)))
+               summarise(sitenum = mean(sitenum))) %>%
+  mutate(sitenum2 = row_number())
 write_csv(longtermsites, './longtermsites.csv')
 
 levels(as.factor(longtermsites$site))
@@ -2013,8 +2015,8 @@ climate_anom <- ee_clim_maxwindow %>%
                select(site, gs, anom_1mo, anom_2mo, anom_3mo, anom_4mo, anom_5mo) %>%
                gather(-site, -gs, key = Type, value = TempAnom) %>%
                mutate(Type = paste0(Type, "_sos"))) %>%
-  full_join(longtermsites) %>% #select(-sitenum)
-  rename(sitenum2 = sitenum)
+  full_join(longtermsites) %>% 
+  select(-sitenum)
 
 statsdataframe <- tibble(
   site = numeric(), 
@@ -2118,35 +2120,193 @@ climfinalstats <- (dplyr::select(clim_statssite_summary, a,  sos1moF, sos2moF,so
                        "max5moF" = "anom_5mo_max", "max5moP" = "anom_5mo_max", "max5moSLOPE" = "anom_5mo_max",
                        "max7moF" = "anom_7mo_max", "max7moP" = "anom_7mo_max",
                        "max9moF" = "anom_9mo_max", "max9moP" = "anom_9mo_max")) %>%
-  full_join((longtermsites %>% select(-sitenum)))  %>% 
-  dplyr::select(-sitenum2) %>%
+  full_join(longtermsites)  %>% 
+  dplyr::select(-sitenum, -sitenum2) %>%
   full_join(climate_anom) %>%
+  mutate(includeCHANGE = ifelse(Stat == 'P value' & Value <= 0.05, 'sig', 'ns')) %>%
+  filter(Stat != "F value") %>%
+  filter(Type == "anom_2mo_sos" | Type == "anom_5mo_max")
+
+
+climfinalstats %>%
+  filter(includeCHANGE == 'sig', Type == 'anom_2mo_sos', Stat == "P value") %>%
+  ggplot(aes(x = gs, y = TempAnom)) +
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_point() +
+  geom_smooth(method='lm', fill=NA, col='black')+
+  facet_wrap(~site) +
+  theme_cowplot() +
+  labs(x='Growing Season', y='SOS temp anom \n(2-mo window around typical SOS)')
+
+
+climfinalstats %>%
+  filter(includeCHANGE == 'sig', Type == 'anom_5mo_max', Stat == "P value") %>%
+  ggplot(aes(x = gs, y = TempAnom)) +
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_point() +
+  geom_smooth(method='lm', fill=NA, col='black')+
+  facet_wrap(~site) +
+  theme_cowplot() +
+  labs(x='Growing Season', y='GS Temp anom \n(5-mo window around typical MAX)')
+
+# #example of a site that doesnt change
+# climfinalstats %>%
+#   filter(site == "potrok", 
+#          Type == "anom_1mo_sos") %>%
+#   ggplot(aes(x = gs, y = TempAnom)) + 
+#   geom_point()
+
+
+```
+
+
+
+* First, it might be good to see which sites have had changes in pehno dates tho
+- programatically determine which sites have sigificant trends in green-up/senescence
+
+```{r phenotrends, eval = T, echo = F, message = F, warning = F}
+#all P values
+statsdataframe <- tibble(
+  site = numeric(), 
+  sosF = numeric(), sosP = numeric(), sosSLOPE = numeric(),
+  eosF = numeric(), eosP = numeric(), 
+  gslF = numeric(), gslP = numeric(), gslSLOPE = numeric(), 
+  maxndviF = numeric(), maxndviP = numeric(), maxNDVISLOPE = numeric())
+
+changedf <- NutNetPheno_wide %>% dplyr::select(site, gs, ChangeSOS, ChangeEOS, ChangeGSL, Change_ndvi_max) %>% 
+  gather(Type, Change, -gs, -site) %>% 
+  left_join(longtermsites)
+
+statssite_summary <- statsdataframe
+
+for (i in c(1:nrow(longtermsites))) {
+  a <- i
+  sitefilter <- changedf %>% filter(sitenum2 == a)
+  
+  sosmod<-if (nrow(filter(sitefilter, Type == 'ChangeSOS')) > 2) {
+    lm(Change ~ gs, data = filter(sitefilter, Type == 'ChangeSOS'))
+  } else {sosmod <- statsdataframe}
+   sosF <-   if (nrow(filter(sitefilter, Type == 'ChangeSOS')) > 2) {Anova(sosmod)$`F value`[1]} else {NA}
+   sosP <-   if (nrow(filter(sitefilter, Type == 'ChangeSOS')) > 2) {Anova(sosmod)$`Pr(>F)`[1]} else {NA}
+  sosSLOPE <- if (nrow(filter(sitefilter, Type == "ChangeSOS")) > 2) { sosmod$coefficients[2] } else {NA}
+
+  eosmod<-if (nrow(filter(sitefilter, Type == 'ChangeEOS')) > 2) {
+    Anova(lm(Change ~ gs, data = filter(sitefilter, Type == 'ChangeEOS')))
+  } else {eosmod <- statsdataframe}
+  eosF <-   if (nrow(filter(sitefilter, Type == 'ChangeEOS'))>2) {eosmod$`F value`[1]} else {NA}
+  eosP <-   if (nrow(filter(sitefilter, Type == 'ChangeEOS')) > 2) {eosmod$`Pr(>F)`[1]} else {NA}
+  
+  gslmod<-if (nrow(filter(sitefilter, Type == 'ChangeGSL')) > 2) {
+    (lm(Change ~ gs, data = filter(sitefilter, Type == 'ChangeGSL')))
+  } else {gslmod <- statsdataframe}
+  gslF <-   if (nrow(filter(sitefilter, Type == 'ChangeGSL')) > 2) {Anova(gslmod)$`F value`[1]} else {NA}
+  gslP <-   if (nrow(filter(sitefilter, Type == 'ChangeGSL')) > 2) {Anova(gslmod)$`Pr(>F)`[1]} else {NA}
+  gslSLOPE <- if (nrow(filter(sitefilter, Type == "ChangeGSL")) > 2) { gslmod$coefficients[2] } else {NA}
+  
+  maxndvimod<-if (nrow(filter(sitefilter, Type == 'Change_ndvi_max')) > 2) {
+    (lm(Change ~ gs, data = filter(sitefilter, Type == 'Change_ndvi_max')))
+  } else {gslmod <- statsdataframe}
+  maxndviF <-   if (nrow(filter(sitefilter, Type == 'Change_ndvi_max')) > 2) {Anova(maxndvimod)$`F value`[1]} else {NA}
+  maxndviP <-   if (nrow(filter(sitefilter, Type == 'Change_ndvi_max')) > 2) {Anova(maxndvimod)$`Pr(>F)`[1]} else {NA}  
+  maxNDVISLOPE <- if (nrow(filter(sitefilter, Type == "Change_ndvi_max")) > 2) { maxndvimod$coefficients[2] } else {NA}
+  
+  stats <- tibble(a, sosF, sosP, sosSLOPE, eosF, eosP, gslF, gslP, gslSLOPE, maxndviF, maxndviP, maxNDVISLOPE)
+  statssite_summary <- rbind (stats, statssite_summary)
+}
+
+
+finalstats <- (dplyr::select(statssite_summary, a, sosF, eosF, gslF, maxndviF) %>% 
+                  gather(Type, Value, -a) %>% mutate(Stat = 'F value')) %>%
+  bind_rows((dplyr::select(statssite_summary, a, sosP, eosP, gslP, maxndviP) %>% 
+               gather(Type, Value, -a) %>% 
+               mutate(Stat = 'P value'))) %>%
+  bind_rows(select(statssite_summary, a, sosSLOPE, gslSLOPE, maxNDVISLOPE) %>%
+              gather(Type, Value, -a) %>%
+              mutate(Stat = "Slope")) %>%
+  rename(sitenum2 = a) %>%
+  mutate(Type = ifelse(Type == 'sosF' | Type == 'sosP' | Type == "sosSLOPE", 'sos',
+                       ifelse(Type == 'eosF' | Type == 'eosP', 'eos',
+                                     ifelse(Type == 'gslF' | Type == 'gslP' | Type == "gslSLOPE", 'gsl', 
+                                            ifelse(Type =="maxndviF" | Type == "maxndviP" | Type == "maxNDVISLOPE", "maxndvi", NA))))) %>%
+  full_join((longtermsites)) %>% 
+  dplyr::select(Type, Value, Stat, site ) %>%
+  full_join(
+    NutNetPheno_wide %>% dplyr::select(site, gs, ChangeEOS, ChangeSOS, ChangeGSL, Change_ndvi_max) %>% 
+               gather(Type, CHANGE, -gs, -site) %>% 
+               mutate(Type = ifelse(Type == 'ChangeEOS', 'eos', 
+                                           ifelse(Type == 'ChangeSOS', 'sos', 
+                                                  ifelse(Type == "ChangeGSL", "gsl",
+                                                         ifelse(Type == "Change_ndvi_max", "maxndvi", NA))))))  %>%
   mutate(includeCHANGE = ifelse(Stat == 'P value' & Value <= 0.05, 'sig', 'ns')) %>%
   filter(Stat != "F value")
 
+#sos plot
+ # (finalstats %>% filter(Type=='sos', !is.na(Value))  %>% ggplot(aes(x=gs, y=CHANGE, col=ifelse(includeCHANGE=='sig', site, ' ns'))) +
+ #    geom_point(aes(pch=includeCHANGE, size = ifelse(includeCHANGE=='sig',1,1))) + #2,1
+ #    geom_smooth(data = filter(finalstats, includeCHANGE=='sig', Type=='sos'), method='lm',fill=NA, aes(group=site, col = ifelse(includeCHANGE=='sig', site, ' ns'))) + 
+ #    geom_smooth(data = filter(finalstats, Type=='sos'), method='lm', col = 'black', aes(group = NA))  +
+ #   labs(col='Site', shape ='Significance', size = 'Significance', y='Green-up day of year') + guides(size=FALSE)+
+ #   scale_shape_manual(values = c(21,19))) +theme_cowplot() +labs(y = 'Change in Green-up', x='Growing Season')
 
-# climfinalstats %>% 
-#   filter(includeCHANGE == 'sig', Type == 'anom_2mo_sos', Stat == "P value") %>%
-#   ggplot(aes(x = gs, y = TempAnom)) +
+# SOSPLOT <- finalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'sos', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = CHANGE)) +
 #   geom_hline(yintercept = 0, lty = 2)+
 #   geom_point() +
 #   geom_smooth(method='lm', fill=NA, col='black')+
 #   facet_wrap(~site) +
 #   theme_cowplot() +
-#   labs(x='Growing Season', y='Temp anom (2 month window around typical SOS)')
+#   labs(x='Growing Season', y='Change in Green-up (days)')
+#  ggsave("./sigSOSplot.pdf", SOSPLOT,dpi=600,width=12,height=7,units='in')
 # 
-# 
-# climfinalstats %>% 
-#   filter(includeCHANGE == 'sig', Type == 'anom_5mo_max', Stat == "P value") %>%
-#   ggplot(aes(x = gs, y = TempAnom)) +
+#  
+#  #eos plot
+# EOSPLOT <- finalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'eos', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = CHANGE)) +
 #   geom_hline(yintercept = 0, lty = 2)+
 #   geom_point() +
+#   geom_smooth(method = 'lm', fill = NA, col = 'black') +
 #   geom_smooth(method='lm', fill=NA, col='black')+
-#   facet_wrap(~site) +
+#   facet_wrap( ~ site) + 
 #   theme_cowplot() +
-#   labs(x='Growing Season', y='Temp anom (5 month window around typical MAX)')
+#   labs(x = 'Growing Season', y = 'Change in Senescence (days)')
+# # ggsave("./sigEOSplot.pdf", EOSPLOT,dpi=600,width=12,height=7,units='in')
+# 
+#  
+# #gsl plot
+# GSLPLOT <- finalstats %>% 
+#   filter(includeCHANGE == 'sig', Type == 'gsl', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = CHANGE)) +
+#   geom_point() +
+#   geom_smooth(method = 'lm', fill = NA, col = 'black') +
+#   facet_wrap( ~ site) +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   theme_cowplot() +
+#   labs(x = 'Growing Season', y = 'Growing season length (days)')
+# # ggsave("./sigGSLplot.pdf", GSLPLOT,dpi=600,width=12,height=7,units='in')
+# 
+# #maxndvi plot
+# MAXNDVIPLOT<-finalstats %>%
+#   filter(includeCHANGE == 'sig', Type == 'maxndvi', Stat == "P value") %>%
+#   ggplot(aes(x = gs, y = CHANGE)) +
+#   geom_point() +
+#   geom_smooth(method = 'lm', fill = NA, col = 'black') +
+#   facet_wrap( ~ site) +
+#   geom_smooth(method='lm', fill=NA, col='black')+
+#   theme_cowplot() +
+#   labs(x = 'Growing Season', y = 'Change in Max NDVI')
+# #  ggsave("./sigMaxNDVIplot.pdf", MAXNDVIPLOT,dpi=600,width=18,height=20,units='in')
+# 
+# 
+# SOSPLOT
+# EOSPLOT
+# GSLPLOT
+# MAXNDVIPLOT
 
 ```
+
+
 
 
 
@@ -2225,6 +2385,50 @@ ANDREWALL <- NutNetPheno_wide %>%
 ```
 
 
+Two key dataframes:
+1) Sites with LONG-TERM 
+
+
+```{r finaldfs}
+
+#this is site summary
+  (SiteInfo) %>%
+  full_join(climfinalstats %>%
+  filter(!is.na(site)) %>%
+  select(site, Type, Stat, Value) %>%
+  unique() %>% 
+  pivot_wider(names_from = c(Type, Stat),
+              values_from = Value) %>%
+  rename(TempTrend36yr_2mo_sos_pvalue = `anom_2mo_sos_P value`,
+         TempTrend36yr_2mo_sos_slope = anom_2mo_sos_Slope, 
+         TempTrend36yr_5mo_max_pvalue = `anom_5mo_max_P value`,
+         TempTrend36yr_5mo_max_slope = anom_5mo_max_Slope)) %>%
+  arrange(site)
 
 
 
+#####
+#working on creating the wide data  
+
+tempanom_wide <- climfinalstats %>%
+  filter(Stat == "P value", !is.na(site)) %>%
+  select(Type, site, gs, TempAnom) %>%
+  unique() %>%
+  pivot_wider(names_from = Type, 
+              values_from = TempAnom) %>%
+  rename(TempAnom_2mo_sos = anom_2mo_sos,
+         TempAnom_5mo_max = anom_5mo_max)
+
+# aggregated 
+NutNetPheno_wide  %>%
+  full_join(tempanom_wide) %>%
+  dplyr::select(site, gs,
+                SOStypicaldate, SOSdate, ChangeSOS, TempAnom_2mo_sos,
+                MAXtypicaldate, MAXdate, ChangeMAX, TempAnom_5mo_max,
+                EOStypicaldate, EOSdate, ChangeEOS, 
+                TypicalGSL, GSLength, ChangeGSL,
+                TypicalMaxNDVI, MAXndvi, Change_ndvi_max) %>%
+  full_join(sitenpp) %>%
+  arrange(site, gs)
+
+```
