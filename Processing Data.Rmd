@@ -15,6 +15,8 @@ always_allow_html: true
 
 ```{r packages, include=F, echo=F, message=F}
 library("sf")
+library("scales")
+library("lme4")
 library("car")
 library("rnaturalearth")
 library("cowplot")
@@ -514,7 +516,7 @@ obsyr_even <- dropbox %>%
 
 region <- dropbox %>%
   separate(site_code, into = c("site", "country"), sep = "[.]") %>%
-  dplyr::select(site, continent, habitat) %>%
+  dplyr::select(site, continent, habitat, latitude, longitude) %>%
   unique()
 
 SiteInfo <- ndep %>%
@@ -2161,7 +2163,7 @@ climfinalstats %>%
 
 
 
-* First, it might be good to see which sites have had changes in pehno dates tho
+* First, it might be good to see which sites have had changes in pheno dates tho
 - programatically determine which sites have sigificant trends in green-up/senescence
 
 ```{r phenotrends, eval = T, echo = F, message = F, warning = F}
@@ -2392,7 +2394,8 @@ Two key dataframes:
 ```{r finaldfs}
 
 #this is site summary
-  (SiteInfo) %>%
+ df_site <-   (longtermsites %>% mutate(check = "included") %>% dplyr::select(site, check)) %>%
+  full_join(SiteInfo) %>%
   full_join(climfinalstats %>%
   filter(!is.na(site)) %>%
   select(site, Type, Stat, Value) %>%
@@ -2409,7 +2412,6 @@ Two key dataframes:
 
 #####
 #working on creating the wide data  
-
 tempanom_wide <- climfinalstats %>%
   filter(Stat == "P value", !is.na(site)) %>%
   select(Type, site, gs, TempAnom) %>%
@@ -2420,7 +2422,7 @@ tempanom_wide <- climfinalstats %>%
          TempAnom_5mo_max = anom_5mo_max)
 
 # aggregated 
-NutNetPheno_wide  %>%
+df_annual <- NutNetPheno_wide  %>%
   full_join(tempanom_wide) %>%
   dplyr::select(site, gs,
                 SOStypicaldate, SOSdate, ChangeSOS, TempAnom_2mo_sos,
@@ -2430,5 +2432,159 @@ NutNetPheno_wide  %>%
                 TypicalMaxNDVI, MAXndvi, Change_ndvi_max) %>%
   full_join(sitenpp) %>%
   arrange(site, gs)
+
+```
+
+
+
+
+# Start analysis
+
+
+## Sites included in this analyses
+
+Sites included in this analyses occur across a wide range of locations (elevation, lat/long), soil characteristics (%C, ppmP, %N), climatic variables (MAP, MAT), and plant species richness. 
+
+```{r SiteHistogram, echo=F, message=F, warning=F}
+var_labs <- as_labeller(c("SoilC" = "Soil C (%)",
+                          "SoilN" = "Soil N (%)",
+                          "SoilK" = "Soil K (ppmP",
+                          "SoilP" = "Soil P (ppm)",
+                          "latitude" = "Latitude",
+                          "longitude" = "Longitude",
+                          "TempMAT" = "Mean annual temperature (°C)",
+                          "RainMAP" = "Mean annual precipitation (mm)",
+                          "ndep_2016" = "N deposition 2016 (mg N/m2/year)",
+                          "Elevation" = "Elevation (m)",
+                          "Richness" = "Species richness"))
+
+df_site %>%
+  filter(check == "included") %>%
+  select( ndep_2016, latitude, longitude, Elevation, TempMAT, RainMAP, Richness, SoilC, SoilN, SoilP, SoilK) %>%
+  gather(Var, Val) %>%
+  ggplot(aes(x = Val))+
+  geom_histogram() + 
+  theme_cowplot()+
+  facet_wrap(~Var, scales = "free", labeller = var_labs)+
+  labs(x = "Value") 
+
+```
+
+
+Sites also occur across contients and across different ecosystems (habitats). (Note, mcdan and vargrass are the sites that don't have habitat information in the latest dropbox file)
+
+```{r SiteTables, echo=F, message=F, warning=F}
+kable(df_site %>%
+  filter(check == "included")  %>% 
+        group_by(continent) %>%
+        summarise(`N sites` = n()) %>% 
+        arrange(-`N sites`))
+ 
+kable(df_site %>%
+  filter(check == "included")  %>% 
+        group_by(habitat) %>%
+        summarise(`N sites` = n()) %>% 
+        arrange(-`N sites`))
+``` 
+
+
+## NDVI is an okay predictor of productivity
+
+Of course, some arguements get made that NDVI is less subject to bias/error than on-the-ground data collection. But the more logical reason for any mismatch here is that NDVI was measured *adjacent* to the main NutNet plots (becuase we didn't want to capture the influence of nutrients during the years when nutrient additon started).
+
+Logistically, I think it makes most sense to include sites that have >= 3 years of biomass+ndvi data in this trend. Because it's not reasonable to think that a tallgrass prairie is going to have the same ndvi-biomass relationship as an alpine meadow and we want to capture the site-trend.
+
+```{r ndviprod, echo=F, message = F, warning=F}
+# #whole dataset trend (all years) if want to actually go this route instead....
+# df_annual %>%
+#   filter(!is.na(ANPP_control), !is.na(MAXndvi)) %>% 
+#   ggplot(aes(x = (ANPP_control), y = (MAXndvi), col = site)) +
+#   geom_point(pch = 21) +
+#   scale_x_continuous(trans =log_trans(), breaks = c(1, 5, 10, 50, 100, 400, 1000)) +
+#   theme_cowplot() +
+#   ylim(0,1) +
+#   guides(col = F) +
+#   geom_smooth(fill = NA, method = 'lm', col = 'black', formula = y ~ x - 1) +
+#   geom_smooth(fill = NA, lwd = .4, method = 'lm') +
+#   labs(y = 'Maximum NDVI', x = 'ANPP, Control plots avg. (g/m2)', title = "Max NDVI is okay predictor of ANPP")
+# 
+# summary(lm(ANPP_control ~ 0 + log(MAXndvi), data = filter(df_annual, !is.na(ANPP_control), !is.na(MAXndvi)))) 
+# 
+# 
+
+#relationship between max NDVI and ANPP, only sites w/ 3+ years 
+ndvi_bio_legend <- get_legend(tibble(Continent = c("Africa", "Asia", "Australia", "Europe", "N. America", "S. America"),
+       color = c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#a65628"),
+       shape = c(21:25, 21)) %>%
+  ggplot(aes(x = 1, y = 1, pch = Continent, col = Continent)) +
+  geom_point() +
+  scale_shape_manual(values = c(21:25, 21)) +
+  scale_color_manual(values = c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#a65628")) +
+  theme_cowplot())
+
+NDVI_biomass <- (df_merge %>%
+  filter(!is.na(ANPP_control), !is.na(MAXndvi), YrsBiomass >= 3) %>% 
+  ggplot(aes(y = (ANPP_control), x = (MAXndvi), col = site)) +
+  theme_cowplot() +
+  ylim(0,1839) +
+  guides(col = F) +
+    
+  geom_point(inherit.aes = F, aes(x = MAXndvi, y = ANPP_control), pch = 21, data = filter(df_merge, YrsBiomass>=3, continent == "Africa"), col = "#e41a1c") +
+  geom_smooth(fill = NA, lwd = .4, method = 'lm', inherit.aes = F, aes(x = MAXndvi, y = ANPP_control, pch = site), data = filter(df_merge, YrsBiomass>=3, continent == "Africa"), col = "#e41a1c") +
+  # geom_smooth(fill = NA, lwd = .4, method = 'lm') +
+
+  geom_point(inherit.aes = F, aes(x = MAXndvi, y = ANPP_control), pch = 22, data = filter(df_merge, YrsBiomass>=3, continent == "Asia"), col = "#377eb8") +
+  geom_smooth(fill = NA, lwd = .4, method = 'lm', inherit.aes = F, aes(x = MAXndvi, y = ANPP_control, pch = site), data = filter(df_merge, YrsBiomass>=3, continent == "Asia"), col = "#377eb8") +
+  # geom_smooth(fill = NA, lwd = .4, method = 'lm') +
+
+  geom_point(inherit.aes = F, aes(x = MAXndvi, y = ANPP_control), pch = 23, data = filter(df_merge, YrsBiomass>=3, continent == "Australia"), col = "#4daf4a") +
+  geom_smooth(fill = NA, lwd = .4, method = 'lm', inherit.aes = F, aes(x = MAXndvi, y = ANPP_control, pch = site), data = filter(df_merge, YrsBiomass>=3, continent == "Australia"), col = "#4daf4a") +
+  # geom_smooth(fill = NA, lwd = .4, method = 'lm') +
+    
+  geom_point(inherit.aes = F, aes(x = MAXndvi, y = ANPP_control), pch = 24, data = filter(df_merge, YrsBiomass>=3, continent == "Europe"), col = "#984ea3") +
+  geom_smooth(fill = NA, lwd = .4, method = 'lm', inherit.aes = F, aes(x = MAXndvi, y = ANPP_control, pch = site), data = filter(df_merge, YrsBiomass>=3, continent == "Europe"), col = "#984ea3") +
+  # geom_smooth(fill = NA, lwd = .4, method = 'lm') +
+                        
+    geom_point(inherit.aes = F, aes(x = MAXndvi, y = ANPP_control), pch = 25, data = filter(df_merge, YrsBiomass>=3, continent == "North America"), col = "#ff7f00") +
+  geom_smooth(fill = NA, lwd = .4, method = 'lm', inherit.aes = F, aes(x = MAXndvi, y = ANPP_control, pch = site), data = filter(df_merge, YrsBiomass>=3, continent == "North America"), col = "#ff7f00") +
+  # geom_smooth(fill = NA, lwd = .4, method = 'lm') +
+
+                            
+    geom_point(inherit.aes = F, aes(x = MAXndvi, y = ANPP_control), pch = 21, data = filter(df_merge, YrsBiomass>=3, continent == "South America"), col = "#a65628") +
+  geom_smooth(fill = NA, lwd = .4, method = 'lm', inherit.aes = F, aes(x = MAXndvi, y = ANPP_control, pch = site), data = filter(df_merge, YrsBiomass>=3, continent == "South America"), col = "#a65628") +
+  # geom_smooth(fill = NA, lwd = .4, method = 'lm') +
+        
+  geom_smooth(fill = NA, method = 'lm', col = 'black', inherit.aes = F, aes(x = MAXndvi, y = ANPP_control)) + # if force thru 0, formula = y ~ x - 1) +
+  labs(x = 'Maximum NDVI', y = 'ANPP_control, Control plots avg. (g/m2)'))#, title = "Max NDVI is okay predictor of ANPP_control\n(sites with 3+ years biomass)"))
+
+PLOTNDVIBIO <-plot_grid(NDVI_biomass, ndvi_bio_legend, rel_widths = c(3, 1))
+ggsave("./FigureS3.pdf", PLOTNDVIBIO,dpi=300,width=7,height=5,units='in')
+
+
+m1 <- (lm(ANPP_control ~ 0 + log(MAXndvi), data = filter(df_annual, !is.na(ANPP_control), !is.na(MAXndvi), YrsBiomass >= 3))) #r2 = .27, p<0.001
+m2 <- (lm(ANPP_control ~ 0 + (MAXndvi), data = filter(df_annual, !is.na(ANPP_control), !is.na(MAXndvi), YrsBiomass >= 3))) #r2 = .72, p<0.001
+m3 <- (lm(ANPP_control ~  log(MAXndvi), data = filter(df_annual, !is.na(ANPP_control), !is.na(MAXndvi), YrsBiomass >= 3))) #r2 = .72, p<0.001
+m4 <- (lm(ANPP_control ~ (MAXndvi), data = filter(df_annual, !is.na(ANPP_control), !is.na(MAXndvi), YrsBiomass >= 3))) #r2 = .72, p<0.001
+AIC(m1, m2, m3, m4) #m4 is the best
+summary(m4)
+
+```
+
+
+```{r}
+Anova(lmer(ChangeSOS ~ TempAnom_2mo_sos + (1|site), data = filter(df_annual, !is.na(ChangeSOS), !is.na(TempAnom_2mo_sos) )))
+
+Anova(lmer(as.numeric(ChangeGSL) ~ TempAnom_5mo_max + (1|site), data = filter(df_annual, !is.na(ChangeGSL), !is.na(TempAnom_5mo_max) )))
+
+Anova(lmer(Change_ndvi_max ~ gs + (1|site), data = df_annual))
+
+df_merge <- df_annual %>% full_join(df_site)
+Anova(lm(TempMAT ~ maxNDVI, data = df_merge))
+Anova(lm(Max5moSlope ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(Elevation ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(N.deposition1993 ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(Richness ~ maxNDVI, data = SUMMARY_TABLE))
+Anova(lm(ObsYrMeanEven ~ maxNDVI, data = SUMMARY_TABLE))
+
 
 ```
