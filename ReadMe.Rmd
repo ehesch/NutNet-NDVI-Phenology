@@ -40,7 +40,7 @@ In all cases, intermediate (processed) files *are* stored on GitHub. However, yo
 dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
 process_raw_climate <- FALSE # TRUE
-localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_Andrew phenology/pheno_localdata" #set this if processing_raw_climate == TRUE
+localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_NutNet phenology/pheno_localdata" #set this if processing_raw_climate == TRUE
 
 process_raw_ndvi <- FALSE #TRUE
 
@@ -559,7 +559,7 @@ In goggle earth engine, the following was run. Apologies that it's long, messy, 
 **NOTE** the lat/longs were "found" by using the `/Dropbox/NutNet data/sites-02-August-2019.csv`. NOT all of the sites have data in the `comb-by-plot-clim-soil-diversity-07-December-2020.csv` file (and so will subsequently be excluded). 
 
 ```GEE code not shown here due to length, but feel free to look at it in the markdown file```
-```{r geecode, include=F, echo=F}
+```{r geecode, eval=F, include=F, echo=F}
 
 # ## GEE code
 # //create ROI
@@ -1484,7 +1484,7 @@ pheno_data_all <- read_csv("./pheno_data_all.csv", col_type = cols())
 
 Of course, all the dates were "redialed" as departure from the average start/end at each site to get change over time
 
-```{r splineseachGS, eval = T, echo = F, message = F, warning = F}
+```{r splineseachGS, echo = F, message = F, warning = F}
 if (process_raw_ndvi == TRUE) {
 
   ##################
@@ -2617,7 +2617,7 @@ df_merge <- df_annual %>% full_join(df_site)
 
 ## Overview
 
-Sites included in this analyses occur across a wide range of locations (elevation, lat/long), soil characteristics (%C, ppmP, %N), climatic variables (MAP, MAT), and plant species richness. 
+Sites included in this analyses occur across a wide range of locations (elevation, lat/long), soil characteristics (%C, ppmP, %N), climatic variables (MAP, MAT), and plant species richness. See fig `FigureS1.pdf`
 
 ```{r SiteHistogram, echo=F, message=F, warning=F}
 var_labs <- as_labeller(c("SoilC" = "Soil C (%)",
@@ -2632,7 +2632,7 @@ var_labs <- as_labeller(c("SoilC" = "Soil C (%)",
                           "Elevation" = "Elevation (m)",
                           "Richness" = "Species richness"))
 
-df_site %>%
+site_histogram <- df_site %>%
   filter(check == "included") %>%
   select( ndep_2016, latitude, longitude, Elevation, TempMAT, RainMAP, Richness, SoilC, SoilN, SoilP, SoilK) %>%
   gather(Var, Val) %>%
@@ -2641,6 +2641,10 @@ df_site %>%
   theme_cowplot()+
   facet_wrap(~Var, scales = "free", labeller = var_labs)+
   labs(x = "Value") 
+
+site_histogram
+ 
+ ggsave("./FigureS1.pdf", site_histogram,dpi=300,width=12,height=7,units='in')
 
 ```
 
@@ -2671,7 +2675,30 @@ ggplot(data = world, label = site) +
   theme_bw() 
 ```
 
+Also there has been a range of phenological change and change in maximum NDVI (from site-level means). See fig `FigureS4_histograms.pdf`
+
+```{r, echo=F, message=F, warning=F} 
+ChangeHist <- df_merge %>% 
+  filter(check == "included", !is.na(ChangeGSL)) %>%
+  select(ChangeGSL, ChangeSOS, ChangeEOS, Change_ndvi_max) %>%
+  rename('Change in GSL (days)' = ChangeGSL,
+         "Change in max NDVI (NDVI)" = Change_ndvi_max,
+         "Change in green-up date (days)" = ChangeSOS,
+         "Change in senescence date (days)" = ChangeEOS) %>%
+  gather("Type",  "Value") %>%
+  ggplot(aes(x=Value))+
+  geom_histogram()+
+  theme_cowplot()+
+  facet_wrap(~Type, scales = "free")
+
+ChangeHist
+ggsave("./FigureS4_histograms.pdf", ChangeHist,dpi=600,width=7,height=5,units='in')
+```
+
+
 ## NDVI is an okay predictor of productivity
+
+See fig `FigureS3.pdf`
 
 Of course, some arguments get made that NDVI is less subject to bias/error than on-the-ground data collection. But the more logical reason for any mismatch here is that NDVI was measured *adjacent* to the main NutNet plots (because we didn't want to capture the influence of nutrients during the years when nutrient addition started).
 
@@ -2769,7 +2796,7 @@ ANPP = ```r summary(m4)$coefficients[1]``` + maxNDVI * ```r summary(m4)$coeffici
 PLOTNDVIBIO
 ```
 
-Here are some other analyses you might want to do....
+
 ```{r, include=F, echo=F, message=F, warning=F}
 Anova(lmer(ChangeSOS ~ TempAnom_2mo_sos + (1|site), 
            data = filter(df_annual, !is.na(ChangeSOS))))
@@ -2787,33 +2814,64 @@ Anova(lmer(as.numeric(ChangeGSL) ~ TempAnom_5mo_max + PrecipAnom_5mo_max + gs + 
 
 ```
 
-## Table 1 - repeated measures (phenological change through time)
-```{r RepeatedMeasures}
-Anova(lmer(Change_ndvi_max ~ site*gs + (1|gs), data = filter(df_annual, !is.na(Change_ndvi_max))))
+## Temporal changes in phenology
 
-Anova(lmer(ChangeSOS ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeSOS))))
+Table 1 - repeated measures (phenological change through time). Have there been directional, temporal shifts towards "greening" and earlier springs since ~1980? Look at fig `fig1_temporaltrends.pdf`
 
-Anova(lmer(ChangeEOS ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeEOS))))
+```{r RepeatedMeasures, echo=F, message=F, warning=F}
+a<-Anova(lmer(ChangeSOS ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(ChangeSOS))))$`Df`
 
-Anova(lmer(as.numeric(ChangeGSL) ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeGSL))))
+b1<-Anova(lmer(ChangeSOS ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(ChangeSOS))))$`Chisq`
+b2<-Anova(lmer(ChangeSOS ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(ChangeSOS))))$`Pr(>Chisq)`
 
+c1 <-Anova(lmer(ChangeEOS ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(ChangeEOS))))$`Chisq`
+c2 <-Anova(lmer(ChangeEOS ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(ChangeEOS))))$`Pr(>Chisq)`
+
+d1 <- Anova(lmer(Change_ndvi_max ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))))$`Chisq`
+d2 <- Anova(lmer(Change_ndvi_max ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))))$`Pr(>Chisq)`
+
+e1 <- Anova(lmer(as.numeric(ChangeGSL) ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(ChangeGSL))))$`Chisq`
+e2 <- Anova(lmer(as.numeric(ChangeGSL) ~ site*gs + (1|gs), data = filter(df_merge, check == "included", !is.na(ChangeGSL))))$`Pr(>Chisq)`
+
+kable(tibble("Variable" = c("site", "gs", "site:gs"), 
+       "d.f." = a,
+       
+       "SOS date X2-value" = round(b1, digits = 2),
+       "SOS date p-value" = round(b2, digits = 3),
+       
+       "EOS date X2-value" = round(c1, digits = 2),
+       "EOS date p-value" = round(c2, digits = 3),
+       
+       "Max NDVI X2-value" = round(d1, digits = 2),
+       "Max NDVI p-value" = round(d2, digits = 3),
+       
+       "GS Length X2-value" = round(e1, digits = 2),
+       "GS Length p-value" = round(e2, digits = 3)))
 ```
 
 
 
-### Some of the world is greening
-
-There has been a directional, temporal shift towards "greening" and earlier springs since ~1980. 
-
-
 ```{r, echo=F, message=F, warning=F}
-fig_ndvi_changes_over_time <- df_merge %>%
-  filter(!is.na(Change_ndvi_max)) %>%
-  ggplot(aes(y = Change_ndvi_max, x = gs, col = site)) +
-  geom_point(pch = 21, col = "grey60")+
+fig_sos_gs <- df_merge %>%
+  filter(!is.na(ChangeSOS), check == "included") %>%
+  ggplot(aes(y = ChangeSOS, x = gs, col = site)) +
+  geom_jitter(height = 0, width = .2, pch = 21, col = "grey60")+
   guides(col = F) +
   geom_smooth(method = "lm", fill =NA, lty = 2, lwd = .5, 
-              data = filter(df_merge, PhenoTrendXyr_gsl_pvalue <=0.05, !is.na(Change_ndvi_max)),
+              data = filter(df_merge, PhenoTrendXyr_gsl_pvalue <=0.05, !is.na(ChangeSOS), check == "included"),
+              aes(group = site), col = "black") +
+  theme_cowplot() +
+    scale_color_manual(values = rep(c(1), 45))+
+    labs ( x = "Growing season (year)",
+  y = "Change in green-up date")
+
+fig_ndvi_gs <- df_merge %>%
+  filter(!is.na(Change_ndvi_max), check == "included") %>%
+  ggplot(aes(y = Change_ndvi_max, x = gs, col = site)) +
+  geom_jitter(height = 0, width = .2, pch = 21, col = "grey60")+
+  guides(col = F) +
+  geom_smooth(method = "lm", fill =NA, lty = 2, lwd = .5, 
+              data = filter(df_merge, PhenoTrendXyr_gsl_pvalue <=0.05, !is.na(Change_ndvi_max), check == "included"),
               aes(group = site), col = "black") +
   theme_cowplot() +
   # geom_hline(yintercept = 0, lty = 2, col = "grey60")+
@@ -2821,27 +2879,76 @@ fig_ndvi_changes_over_time <- df_merge %>%
     labs ( x = "Growing season (year)",
   y = "Change in maximum NDVI")
 
-fig_ndvi_changes_over_time
-ggsave("./fig_ndvi_changes_over_time.pdf", fig_ndvi_changes_over_time,dpi=600,width=4,height=4,units='in')
+fig_gsl_gs <- df_merge %>%
+  filter(!is.na(ChangeGSL), check == "included") %>%
+  ggplot(aes(y = as.numeric(ChangeGSL), x = gs, col = site)) +
+  geom_jitter(height = 0, width = .2, pch = 21, col = "grey60")+
+  guides(col = F) +
+  geom_smooth(method = "lm", fill =NA, lty = 2, lwd = .5, 
+              data = filter(df_merge, PhenoTrendXyr_gsl_pvalue <=0.05, !is.na(ChangeGSL), check == "included"),
+              aes(group = site), col = "black") +
+  theme_cowplot() +
+  # geom_hline(yintercept = 0, lty = 2, col = "grey60")+
+    scale_color_manual(values = rep(c(1), 45))+
+    labs ( x = "Growing season (year)",
+  y = "Change in GS length")
+
+# cor.test(pheno_long_df$Change_ndvi_max, pheno_long_df$ChangeGSL)
+
+fig1_temporaltrends <- plot_grid(fig_sos_gs, 
+                                 fig_ndvi_gs,
+                                 fig_gsl_gs, 
+                                 nrow = 3, labels = "AUTO")
+
+fig1_temporaltrends
+ggsave("./fig1_temporaltrends.pdf", fig1_temporaltrends,dpi=600,width=4.5,height=10,units='in')
 
 ```
 
 
-### Annual phenology change + annual weather changes
+## Interannual weather changes + phenological anomalies
 
-There has been a directional, temporal shift towards "greening" and earlier springs since ~1980. 
+Have warmer or wetter springs or growing seasons had an impact on phenological dates or productivity? Look at fig `Fig2_phenoENV.pdf`
 
 
 ```{r, echo=F, message=F, warning=F}
-Anova(lmer(ChangeSOS ~ TempAnom_2mo_sos + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeSOS))  ))
-Anova(lmer(Change_ndvi_max ~ TempAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))  ))
-Anova(lmer(as.numeric(ChangeGSL) ~ TempAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeGSL))  ))
+# #temp ----
+f1 <- Anova(lmer(ChangeSOS ~ TempAnom_2mo_sos + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeSOS))  ))$`Chisq`
+f2 <- Anova(lmer(ChangeSOS ~ TempAnom_2mo_sos + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeSOS))  ))$`Pr(>Chisq)`
 
-Anova(lmer(ChangeSOS ~ PrecipAnom_2mo_sos + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeSOS))  ))
-Anova(lmer(Change_ndvi_max ~ PrecipAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))  ))
-Anova(lmer(as.numeric(ChangeGSL) ~ PrecipAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeGSL))  ))
+g1 <-Anova(lmer(Change_ndvi_max ~ TempAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))  ))$`Chisq`
+g2 <-Anova(lmer(Change_ndvi_max ~ TempAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))  ))$`Pr(>Chisq)`
+
+h1 <- Anova(lmer(as.numeric(ChangeGSL) ~ TempAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeGSL))  ))$`Chisq`
+h2 <- Anova(lmer(as.numeric(ChangeGSL) ~ TempAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeGSL))  ))$`Pr(>Chisq)`
+
+# #precip ----
+
+i1 <- Anova(lmer(ChangeSOS ~ PrecipAnom_2mo_sos + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeSOS))  ))$`Chisq`
+i2 <- Anova(lmer(ChangeSOS ~ PrecipAnom_2mo_sos + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeSOS))  ))$`Pr(>Chisq)`
+
+j1 <- Anova(lmer(Change_ndvi_max ~ PrecipAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))  ))$`Chisq`
+j2 <- Anova(lmer(Change_ndvi_max ~ PrecipAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))  ))$`Pr(>Chisq)`
+
+k1 <- Anova(lmer(as.numeric(ChangeGSL) ~ PrecipAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeGSL))  ))$`Chisq`
+k2 <- Anova(lmer(as.numeric(ChangeGSL) ~ PrecipAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeGSL))  ))$`Pr(>Chisq)`
+
+# #kable ----
+
+kable(tribble(~"Phenology var.", ~ "Weather var.", ~"d.f.", ~"X2 value", ~"p value",
+        "Change SOS date", "Temp anamoly 2mo prior to GU", 1, round(f1, digits = 2), round(f2, digits = 3),
+        "Change SOS date", "Precip anamoly 2mo prior to GU", 1, round(i1, digits = 2), round(i2, digits = 3),
+       
+        "Change max NDVI", "Temp anamoly of 5mo GS", 1, round(g1, digits = 2), round(g2, digits = 3),
+        "Change max NDVI", "Precip anamoly of 5mo GS", 1, round(j1, digits = 2), round(j2, digits = 3),
+
+        "Change GS length", "Temp anamoly of 5mo GS", 1, round(h1, digits = 2), round(h2, digits = 3),
+        "Change GS length", "Precip anamoly of 5mo GS", 1, round(k1, digits = 2), round(k2, digits = 3)))
+
+```
 
 
+```{r, echo=F, message=F, warning=F}
 # #temp figs ----
 fig_sostemp_gudate <- df_merge %>%
   filter(check == "included",!is.na(ChangeSOS)) %>%
@@ -3023,43 +3130,20 @@ In looking at sites which have *most* site-level data, there are ```r length(uni
 
 If we want to look at soil nutrient levels, there are only ```r  length(unique(pca_soil_data$site))``` sites with complete data. 
 
-## was trying to make gsl + temp anom with trendline if sig relationshiop....
-
-```{r, echo=F, message=F, warning=F}
-fig_ndvi_changes_over_time <- df_merge %>%
-  filter(!is.na(ChangeGSL)) %>%
-  ggplot(aes(y = as.numeric(ChangeGSL), x = TempAnom_5mo_max, col = site)) +
-  geom_point(pch = 21, col = "grey60")+
-  guides(col = F) +
-  geom_smooth(method = "lm", fill =NA, lty = 2, lwd = .5, 
-              # data = filter(df_merge, PhenoTrendXyr_gsl_pvalue <=0.05, !is.na(Change_ndvi_max)),
-              aes(group = site), col = "black") +
-  theme_cowplot() +
-  # geom_hline(yintercept = 0, lty = 2, col = "grey60")+
-    scale_color_manual(values = rep(c(1), 45))+
-    labs ( x = "Growing season (year)",
-  y = "Change in maximum NDVI")
-
-fig_ndvi_changes_over_time
-ggsave("./fig_ndvi_changes_over_time.pdf", fig_ndvi_changes_over_time,dpi=600,width=4,height=4,units='in')
-
-```
-
-
 
 ## NutNet 2020 discussions
 
 Running into issues with singularities, this never got resolved.....
 
-Basically the goal is to go on a fishing expidition...
-```{r, echo=F, message=F, warning=F}
+Basically the goal is to go on a fishing expedition...
+```{r, include=F, echo=F, message=F, warning=F}
 library("cAIC4")
 library("MuMIn")
 # #Eric suggestions
 summary(lmer(ChangeSOS ~ #change in green-up date from long-term avg.
              gs + #site * growing season (year)
              (gs | site),
-           data = filter(df_annual, !is.na(ChangeSOS))))
+           data = filter(df_merge, check == "included", !is.na(ChangeSOS))))
 
 # then go on a fishing expedition - does the *temporal* signature of phenology (e.g. the SLOPE of green-up date thru time) map onto any abiotic or biotic site-level characteristics?
 # year, or growing season, is implicit within the slopes being analyzed - this this is just a straight linear model
@@ -3074,10 +3158,10 @@ Anova(lmer(PhenoTrendXyr_sos_slope ~ #slope of green-up date change thru time
              # ObsYrMeanEven + #NAs in this variable; so removed
              # SoilC + SoilN + SoilP + #NAs in this variable; so removed
              (1 | continent),
-             data = filter(df_merge, !is.na(PhenoTrendXyr_sos_slope), !is.na(FractionExotic), !is.na(Elevation))))
+             data = filter(df_merge, check=="included", !is.na(PhenoTrendXyr_sos_slope))))
 
 # #dredge my fishing expedition
-# #but it's all unhappy
+# #but it's all unhappy w/ singualiities
 # m4 <- (lmer(PhenoTrendXyr_sos_slope ~ #slope of green-up date change thru time
 #              abs(latitude) + #absolute value of latitude (since southern hemi sites!)
 #              Elevation + #elevation
@@ -3089,15 +3173,15 @@ Anova(lmer(PhenoTrendXyr_sos_slope ~ #slope of green-up date change thru time
 #              # ObsYrMeanEven + #NAs in this variable; so removed
 #              # SoilC + SoilN + SoilP + #NAs in this variable; so removed
 #              (1 | continent),
-#              data = filter(df_merge, !is.na(PhenoTrendXyr_sos_slope), !is.na(FractionExotic), !is.na(Elevation))))
+#              data = filter(df_merge, check=="included", !is.na(PhenoTrendXyr_sos_slope))))
 # m4.step <- stepcAIC(m4,direction="backward", trace=TRUE, data=df) #cant do w/singularities
 # options(na.action = "na.fail")
 # dd <- dredge(m4) #hates singularities
 # results <- subset(dd, delta < 4)
 # importance(results) #mat, exotic
-# Anova(lmer(PhenoTrendXyr_sos_slope ~ FractionExotic + (gs|site), 
+# Anova(lmer(PhenoTrendXyr_sos_slope ~ FractionExotic + (gs|site),
 #            data = filter(df_merge, !is.na(PhenoTrendXyr_sos_slope), !is.na(FractionExotic))))
-# 
+
 # #Eric suggestion -- singularities
 # Anova(lmer(as.numeric(ChangeSOS) ~ 
 #              gs *
@@ -3157,4 +3241,9 @@ Anova(lmer(PhenoTrendXyr_sos_slope ~ #slope of green-up date change thru time
 # a<-stepcAIC(model3,direction="backward", trace=TRUE, data=data3) #cant do w/singularities
 
 ```
+
+
+## Make trendline of every site
+`this code is available if needed`
+
 
