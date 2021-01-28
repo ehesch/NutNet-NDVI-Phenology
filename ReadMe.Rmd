@@ -1859,12 +1859,14 @@ write_csv(longtermsites, './longtermsites.csv')
 levels(as.factor(longtermsites$site))
 ```
 
-# Merge climate data with phenology data, process temporal trends
-* The goal is to recognize that some growing seasons see bigger temperature and precipitation anomalies, does that influence site phenology/productivity? To look at the temp/precip anomolies in each growing season:
-  + We can look weather windows BEFORE/during the typical green-up month (here looking at the 2 month window before the typical green-up date)
-  + And also do weather windows around the typical date of NDVI max (here looking at a 5 month window around the typical maximum ndvi date (basically the month of max ndvi + the 2 months before and after from that date; this is essentially a growing season)
+# Merge climate data with phenology data
 
-This plot simply shows sites which have seen a significant trend in temperatures and precipitaiton over time within a 2 month window preceding the site-specific typical green-up date. 
+## Temporal trends in climate anomalies
+* The goal is to recognize that some growing seasons see bigger temperature and precipitation anomalies, does that influence site phenology/productivity? To look at the temperature/precipitation anomalies in each growing season:
+  + We can look weather windows BEFORE/during the typical green-up month (here looking at the 2 month window before the typical green-up date)
+  + And also do weather windows around the typical date of NDVI max (here looking at a 5 month window around the typical maximum NDVI date (basically the month of max ndvi + the 2 months before and after from that date; this is essentially a growing season)
+
+This plot simply shows sites which have seen a significant trend in temperatures and precipitation over time within a 2 month window preceding the site-specific typical green-up date. 
 
 ```{r temptrends, eval = T, echo = F, message = F, warning = F}
 
@@ -2281,6 +2283,7 @@ climate_anom_df %>%
 
 ```
 
+## Process temporal trends in phenological dates
 
 * Similarly, we want to see if sites have seen significant changes in phenological dates over time. 
 
@@ -2387,11 +2390,14 @@ kable(pheno_trend_df %>%
 ```
 
 
-# Process relationships between annual temp + phenology anomolies
+## Process interannual weather variability + interannual phenological anomolies
 
+- Also interesting to look at yearly deviations in GS length + climate anomaly
 
-- Also interesting to look at yearly deviations in GS length + climate anomoly
-```{r climatephenoLOOP}
+```{r climatephenoLOOP, eval = T, echo = F, message = F, warning = F}
+if (merge_climate_ndvi == TRUE) {
+
+  
 #all P values
 ANOM_statsdataframe <- tibble(
   site = numeric(), 
@@ -2487,110 +2493,34 @@ for (i in c(1:nrow(longtermsites))) {
   anom_statssite_summary <- rbind (stats, anom_statssite_summary)
 }
 
-ANOM_finalstats <- (dplyr::select(anom_statssite_summary, a, 
-                                  sos_sos2motemp_F, gsl_max5motemp_F, maxNDVI_max5motemp_F, gsl_maxNDVI_F,
-                                  sos_sos2moprecip_F, gsl_max5moprecip_F, maxNDVI_max5moprecip_F) %>% 
-                  gather(Type, Value, -a) %>% mutate(Stat = 'F value')) %>%
-  bind_rows((dplyr::select(anom_statssite_summary, a, 
-                           sos_sos2motemp_P, gsl_max5motemp_P, maxNDVI_max5motemp_P, gsl_maxNDVI_P,
-                           sos_sos2moprecip_P, gsl_max5moprecip_P, maxNDVI_max5moprecip_P) %>% 
-               gather(Type, Value, -a) %>% 
-               mutate(Stat = 'P value'))) %>%
-  bind_rows((dplyr::select(anom_statssite_summary, a, 
-                           sos_sos2motemp_SLOPE, gsl_max5motemp_SLOPE, maxNDVI_max5motemp_SLOPE, gsl_maxNDVI_SLOPE,
-                           sos_sos2moprecip_SLOPE, gsl_max5moprecip_SLOPE, maxNDVI_max5moprecip_SLOPE) %>% 
-               gather(Type, Value, -a) %>% 
-               mutate(Stat = 'Slope'))) %>%
-  rename(sitenum2 = a) %>%
-  mutate(Type = recode(Type, 'sos_sos2motemp_F' = "sosChange_sos2motemp",
-                        "sos_sos2motemp_P" = "sosChange_sos2motemp",
-                       "sos_sos2motemp_SLOPE" = "sosChange_sos2motemp")) %>%
-  mutate(Type = recode(Type, 'gsl_max5motemp_F' = "gslChange_max5motemp",
-                        "gsl_max5motemp_P" = "gslChange_max5motemp",
-                       "gsl_max5motemp_SLOPE" = "gslChange_max5motemp")) %>%
-  mutate(Type = recode(Type, 'maxNDVI_max5motemp_F' = "maxNDVIChange_max5motemp",
-                        "maxNDVI_max5motemp_P" = "maxNDVIChange_max5motemp",
-                       "maxNDVI_max5motemp_SLOPE" = "maxNDVIChange_max5motemp")) %>%
-  mutate(Type = recode(Type, 'gsl_maxNDVI_F' = "gsl_maxNDVI",
-                        "gsl_maxNDVI_P" = "gsl_maxNDVI",
-                       "gsl_maxNDVI_SLOPE" = "gsl_maxNDVI")) %>%  
- mutate(Type = recode(Type, 'sos_sos2moprecip_F' = "sosChange_sos2moprecip",
-                        "sos_sos2moprecip_P" = "sosChange_sos2moprecip",
-                       "sos_sos2moprecip_SLOPE" = "sosChange_sos2moprecip")) %>%
-  mutate(Type = recode(Type, 'gsl_max5moprecip_F' = "gslChange_max5moprecip",
-                        "gsl_max5moprecip_P" = "gslChange_max5moprecip",
-                       "gsl_max5moprecip_SLOPE" = "gslChange_max5moprecip")) %>%
-  mutate(Type = recode(Type, 'maxNDVI_max5moprecip_F' = "maxNDVIChange_max5moprecip",
-                        "maxNDVI_max5moprecip_P" = "maxNDVIChange_max5moprecip",
-                       "maxNDVI_max5moprecip_SLOPE" = "maxNDVIChange_max5moprecip")) %>%
-
-  full_join((longtermsites %>% select(-sitenum)))  %>% 
-  dplyr::select(Type, Value, Stat, site ) %>%
-  pivot_wider(names_from = Stat, values_from = Value) %>%
-  mutate(sig = ifelse(`P value` <= 0.05 & Slope < 0, "-", 
-                      ifelse(`P value` <= 0.05 & Slope > 0 , "+",
-                             ifelse(`P value` > 0.05, "o", NA)))) %>%
-  full_join(eachyr)
-
-#need to clean up from here
-
-ANOM_finalstats %>% filter(Type =="gslChange_max5motemp") %>%
-  ggplot(aes(x = anom_5moTemp_max, y = ChangeGSL, col = site)) +
-  geom_point(pch = 21, col = "grey60")+
-  guides(col = F)+
-  geom_smooth(method = 'lm', data = filter(ANOM_finalstats, Type =="gslChange_max5motemp",  sig!="o"), fill = NA, lty = 2, lwd = .5) +
-  # geom_smooth(method = "lm", data = filter(ANOM_finalstats, sig !="o"), col = "black", fill = NA)+
-  theme_cowplot() +
-  geom_vline(xintercept = 0, lty = 2, col = "grey60")+
-  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
-  scale_color_manual(values = rep(c("black"), 99))
-ANOM_finalstats %>% filter(Type =="gslChange_max5motemp") %>% 
-  group_by(site) %>%
-  summarise(gs = min(gs)) %>%
-  inner_join(ANOM_finalstats %>%
-               filter(Type =="gslChange_max5motemp")) %>%
-  group_by(sig) %>% summarise(gslChange_max5motemp = n())
+anom_vs_climate <- anom_statssite_summary %>%
+  transmute(sitenum2 = a,
+    ChangeSOS_TempAnom_2mo_sos_pvalue = sos_sos2motemp_P, 
+         ChangeSOS_TempAnom_2mo_sos_slope = sos_sos2motemp_SLOPE,
+         ChangeSOS_PrecipAnom_2mo_sos_pvalue = sos_sos2moprecip_P,
+         ChangeSOS_PrecipAnom_2mo_sos_slope = sos_sos2moprecip_SLOPE,
+         
+         Change_ndvi_max_TempAnom_5mo_max_pvalue = maxNDVI_max5motemp_P,
+         Change_ndvi_max_TempAnom_5mo_max_slope = maxNDVI_max5motemp_SLOPE,
+         Change_ndvi_max_PrecipAnom_5mo_max_pvalue = maxNDVI_max5moprecip_P,
+         Change_ndvi_max_PrecipAnom_5mo_max_slope = maxNDVI_max5moprecip_SLOPE,
+         Change_ndvi_max_ChangeGSL_pvalue = gsl_maxNDVI_P,
+         Change_ndvi_max_ChangeGSL_slope = gsl_maxNDVI_SLOPE,
+         
+         ChangeGSL_TempAnom_5mo_max_pvalue= gsl_max5motemp_P,
+         ChangeGSL_TempAnom_5mo_max_slope= gsl_max5motemp_SLOPE,
+         ChangeGSL_PrecipAnom_5mo_max_pvalue= gsl_max5moprecip_P,
+         ChangeGSL_PrecipAnom_5mo_max_slope= gsl_max5moprecip_SLOPE) %>%
+    full_join((longtermsites %>% select(-sitenum))) %>%
+  select(-sitenum2)
 
 
-(ANOM_finalstats %>% filter(Type =="gslChange_max5moprecip") %>%
-  ggplot(aes(x = anom_5moPrecip_max, y = ChangeGSL, col = site, label = site)) +
-  geom_point(pch = 21, col = "grey60")+
-  guides(col = F)+
-  geom_smooth(method = 'lm', data = filter(ANOM_finalstats, Type =="gslChange_max5moprecip",  sig!="o"), fill = NA, lty = 2, lwd = .5) +
-  # geom_smooth(method = "lm", data = filter(ANOM_finalstats, sig !="o"), col = "black", fill = NA)+
-  theme_cowplot() +
-  geom_vline(xintercept = 0, lty = 2, col = "grey60")+
-  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
-  scale_color_manual(values = rep(c("black"), 99)))
-ANOM_finalstats %>% filter(Type =="gslChange_max5moprecip") %>% 
-  group_by(site) %>%
-  summarise(gs = min(gs)) %>%
-  inner_join(ANOM_finalstats %>%
-               filter(Type =="gslChange_max5moprecip")) %>%
-  group_by(sig) %>% summarise(gslChange_max5moprecip = n())
+write_csv(anom_vs_climate, 'anom_vs_climate.csv')
 
+} else 
+{ print("Not merging weather and ndvi")}
 
-ANOM_finalstats %>% filter(Type =="sosChange_sos2motemp") %>%
-  ggplot(aes(x = anom_2moTemp_sos, y = ChangeSOS, col = site)) +
-  geom_point(pch = 21, col = "grey60")+
-  guides(col = F)+
-  geom_smooth(method = 'lm', data = filter(ANOM_finalstats, Type =="sosChange_sos2motemp",  sig!="o"), fill = NA, lty = 2, lwd = .5) +
-  # geom_smooth(method = "lm", data = filter(ANOM_finalstats, sig !="o"), col = "black", fill = NA)+
-  theme_cowplot() +
-  geom_vline(xintercept = 0, lty = 2, col = "grey60")+
-  geom_hline(yintercept = 0, lty = 2, col = "grey60")+
-    scale_color_manual(values = rep(c("black"), 68))+
-  labs(x = "Green-up temp anamoly (°C)", y = "Change in green-up date (days)")
-
-
-ANOM_finalstats %>% filter(Type =="sosChange_sos2motemp") %>% 
-  group_by(site) %>%
-  summarise(gs = min(gs)) %>%
-  inner_join(ANOM_finalstats %>%
-               filter(Type =="sosChange_sos2motemp")) %>%
-  group_by(sig) %>% summarise(N = n())
-
-
+anom_vs_climate <- read_csv("./anom_vs_climate.csv", col_types = cols())
 ```
 
 
@@ -2645,7 +2575,8 @@ These two data frames can be combined into a `df_merge`.
   arrange(site) %>% 
   dplyr::select(-"anom_1moTemp_sos_P value", -"anom_3moTemp_sos_P value", -"anom_4moTemp_sos_P value", -"anom_1moTemp_max_P value", -"anom_3moTemp_max_P value",
                 -"anom_7moTemp_max_P value", -"anom_9moTemp_max_P value", -"anom_1moPrecip_sos_P value", -"anom_3moPrecip_sos_P value", 
-                -"anom_4moPrecip_sos_P value", -"anom_1moPrecip_max_P value" , -"anom_3moPrecip_max_P value", -"anom_7moPrecip_max_P value", -"anom_9moPrecip_max_P value")
+                -"anom_4moPrecip_sos_P value", -"anom_1moPrecip_max_P value" , -"anom_3moPrecip_max_P value", -"anom_7moPrecip_max_P value", -"anom_9moPrecip_max_P value") %>%
+  full_join(anom_vs_climate)
 
 
 #####
@@ -2864,7 +2795,7 @@ Anova(lmer(ChangeSOS ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeS
 
 Anova(lmer(ChangeEOS ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeEOS))))
 
-Anova(lmer(ChangeGSL ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeGSL))))
+Anova(lmer(as.numeric(ChangeGSL) ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeGSL))))
 
 ```
 
@@ -2893,6 +2824,133 @@ fig_ndvi_changes_over_time <- df_merge %>%
 fig_ndvi_changes_over_time
 ggsave("./fig_ndvi_changes_over_time.pdf", fig_ndvi_changes_over_time,dpi=600,width=4,height=4,units='in')
 
+```
+
+
+### Annual phenology change + annual weather changes
+
+There has been a directional, temporal shift towards "greening" and earlier springs since ~1980. 
+
+
+```{r, echo=F, message=F, warning=F}
+Anova(lmer(ChangeSOS ~ TempAnom_2mo_sos + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeSOS))  ))
+Anova(lmer(Change_ndvi_max ~ TempAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))  ))
+Anova(lmer(as.numeric(ChangeGSL) ~ TempAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeGSL))  ))
+
+Anova(lmer(ChangeSOS ~ PrecipAnom_2mo_sos + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeSOS))  ))
+Anova(lmer(Change_ndvi_max ~ PrecipAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(Change_ndvi_max))  ))
+Anova(lmer(as.numeric(ChangeGSL) ~ PrecipAnom_5mo_max + (1|site), data = filter(df_merge, check == "included", !is.na(ChangeGSL))  ))
+
+
+# #temp figs ----
+fig_sostemp_gudate <- df_merge %>%
+  filter(check == "included",!is.na(ChangeSOS)) %>%
+  ggplot(aes(y = ChangeSOS, x = TempAnom_2mo_sos, col = site)) +
+  geom_point(pch = 21, col = "grey60") +
+  guides(col = F) +
+  geom_smooth(method = "lm", fill = NA, lty = 2, lwd = .5,
+              aes(group = site), col = "black",
+              data = filter(df_merge, check == "included", !is.na(ChangeSOS), ChangeSOS_TempAnom_2mo_sos_pvalue <= 0.05)) +
+  theme_cowplot() +
+  scale_color_manual(values = rep(c(1), 45)) +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60") +
+  geom_hline(yintercept = 0, lty = 2, col = "grey60") +
+  labs(x = "Temp anamoly (°C) 2mo prior to GU", y = "Change in \ngreen-up date (days)") +
+  scale_x_continuous(limits = c(-11, 11),
+                     breaks = c(-10, -5, 0, 5, 10))
+
+
+fig_gutemp_maxndvi <- df_merge %>%
+  filter(check == "included",!is.na(Change_ndvi_max)) %>%
+  ggplot(aes(y = Change_ndvi_max, x = TempAnom_5mo_max, col = site)) +
+  geom_point(pch = 21, col = "grey60") +
+  guides(col = F) +
+  geom_smooth(method = "lm", fill = NA, lty = 2, lwd = .5,
+              aes(group = site), col = "black",
+              data = filter(df_merge, check == "included", !is.na(Change_ndvi_max), Change_ndvi_max_TempAnom_5mo_max_pvalue <= 0.05)) +
+  theme_cowplot() +
+  scale_color_manual(values = rep(c(1), 45)) +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60") +
+  geom_hline(yintercept = 0, lty = 2, col = "grey60") +
+  labs(x = "Temp anamoly (°C) of 5mo GS", y = "Change in \nmaximum NDVI") +
+  scale_x_continuous(limits = c(-11, 11),
+                     breaks = c(-10, -5, 0, 5, 10))
+
+fig_gutemp_gsl <- df_merge %>%
+  filter(check == "included",!is.na(ChangeGSL)) %>%
+  ggplot(aes(y = ChangeGSL, x = TempAnom_5mo_max, col = site)) +
+  geom_point(pch = 21, col = "grey60") +
+  guides(col = F) +
+  geom_smooth(method = "lm", fill = NA, lty = 2, lwd = .5,
+              aes(group = site), col = "black",
+              data = filter(df_merge, check == "included", !is.na(ChangeGSL), ChangeGSL_TempAnom_5mo_max_pvalue <= 0.05)) +
+  theme_cowplot() +
+  scale_color_manual(values = rep(c(1), 45)) +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60") +
+  geom_hline(yintercept = 0, lty = 2, col = "grey60") +
+  labs(x = "Temp anamoly (°C) of 5mo GS", y = "Change in \ngrowing season length (days)") +
+  scale_x_continuous(limits = c(-11, 11),
+                     breaks = c(-10, -5, 0, 5, 10))
+
+
+# #precip figs ----
+fig_sosprecip_gudate <- df_merge %>%
+  filter(check == "included",!is.na(ChangeSOS)) %>%
+  ggplot(aes(y = ChangeSOS, x = PrecipAnom_2mo_sos, col = site)) +
+  geom_point(pch = 21, col = "grey60") +
+  guides(col = F) +
+  geom_smooth(method = "lm", fill = NA, lty = 2, lwd = .5,
+              aes(group = site), col = "black",
+              data = filter(df_merge, check == "included", !is.na(ChangeSOS), ChangeSOS_PrecipAnom_2mo_sos_pvalue <= 0.05)) +
+  theme_cowplot() +
+  scale_color_manual(values = rep(c(1), 45)) +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60") +
+  geom_hline(yintercept = 0, lty = 2, col = "grey60") +
+  labs(x = "Precip anamoly (mm) 2mo prior to GU", y = "Change in \ngreen-up date (days)") +
+    scale_x_continuous(limits = c(-500, 750), 
+                       breaks = c(-500, -250, 0, 250, 500, 750))
+
+
+fig_guprecip_maxndvi <- df_merge %>%
+  filter(check == "included",!is.na(Change_ndvi_max)) %>%
+  ggplot(aes(y = Change_ndvi_max, x = PrecipAnom_5mo_max, col = site)) +
+  geom_point(pch = 21, col = "grey60") +
+  guides(col = F) +
+  geom_smooth(method = "lm", fill = NA, lty = 2, lwd = .5,
+              aes(group = site), col = "black",
+              data = filter(df_merge, check == "included", !is.na(Change_ndvi_max), Change_ndvi_max_PrecipAnom_5mo_max_pvalue <= 0.05)) +
+  theme_cowplot() +
+  scale_color_manual(values = rep(c(1), 45)) +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60") +
+  geom_hline(yintercept = 0, lty = 2, col = "grey60") +
+  labs(x = "Precip anamoly (mm) of 5mo GS", y = "Change in \nmaximum NDVI") +
+    scale_x_continuous(limits = c(-500, 750), 
+                       breaks = c(-500, -250, 0, 250, 500, 750))
+
+fig_guprecip_gsl <- df_merge %>%
+  filter(check == "included",!is.na(ChangeGSL)) %>%
+  ggplot(aes(y = ChangeGSL, x = PrecipAnom_5mo_max, col = site)) +
+  geom_point(pch = 21, col = "grey60") +
+  guides(col = F) +
+  geom_smooth(method = "lm", fill = NA, lty = 2, lwd = .5,
+              aes(group = site), col = "black",
+              data = filter(df_merge, check == "included", !is.na(ChangeGSL), ChangeGSL_PrecipAnom_5mo_max_pvalue <= 0.05)) +
+  theme_cowplot() +
+  scale_color_manual(values = rep(c(1), 45)) +
+  geom_vline(xintercept = 0, lty = 2, col = "grey60") +
+  geom_hline(yintercept = 0, lty = 2, col = "grey60") +
+  labs(x = "Precip anamoly (mm) of 5mo GS", y = "Change in \ngrowing season length (days)") +
+    scale_x_continuous(limits = c(-500, 750), 
+                       breaks = c(-500, -250, 0, 250, 500, 750))
+
+
+Fig2_phenoENV <- plot_grid(fig_sostemp_gudate, fig_sosprecip_gudate,
+                           fig_gutemp_maxndvi, fig_guprecip_maxndvi, 
+                           fig_gutemp_gsl, fig_guprecip_gsl,
+                           nrow = 3, labels = "AUTO")
+ggsave("./Fig2_phenoENV.pdf", Fig2_phenoENV,dpi=600,width=9,height=10,units='in')
+
+Fig2_phenoENV
 ```
 
 

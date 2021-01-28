@@ -17,13 +17,22 @@ Ellen Esch
     analysis](#determine-sites-to-use-in-analysis)
 -   [Merge climate data with phenology data, process temporal
     trends](#merge-climate-data-with-phenology-data-process-temporal-trends)
+-   [Process relationships between annual temp + phenology
+    anomolies](#process-relationships-between-annual-temp-phenology-anomolies)
 -   [Make final dataframes](#make-final-dataframes)
 -   [Start analysis](#start-analysis)
     -   [Overview](#overview-1)
     -   [NDVI is an okay predictor of
         productivity](#ndvi-is-an-okay-predictor-of-productivity)
-    -   [Some of the world is greening](#some-of-the-world-is-greening)
+    -   [Table 1 - repeated measures (phenological change through
+        time)](#table-1---repeated-measures-phenological-change-through-time)
+        -   [Some of the world is
+            greening](#some-of-the-world-is-greening)
+        -   [Annual phenology change + annual weather
+            changes](#annual-phenology-change-annual-weather-changes)
     -   [PCAs](#pcas)
+    -   [was trying to make gsl + temp anom with trendline if sig
+        relationshiop….](#was-trying-to-make-gsl-temp-anom-with-trendline-if-sig-relationshiop.)
     -   [NutNet 2020 discussions](#nutnet-2020-discussions)
 
 # Overview
@@ -355,7 +364,7 @@ confirm/add/remove site lat/long, this list will change.
 
 -   The goal is to recognize that some growing seasons see bigger
     temperature and precipitation anomalies, does that influence site
-    phenology/productivity? To look at the temp/precip anomolies in each
+    phenology/productivity? To look at the temp/precip anomalies in each
     growing season:
     -   We can look weather windows BEFORE/during the typical green-up
         month (here looking at the 2 month window before the typical
@@ -456,6 +465,135 @@ sos
 </tr>
 </tbody>
 </table>
+
+# Process relationships between annual temp + phenology anomolies
+
+-   Also interesting to look at yearly deviations in GS length + climate
+    anomaly
+
+``` r
+#all P values
+ANOM_statsdataframe <- tibble(
+  site = numeric(), 
+  sos_sos2motemp_F = numeric(), sos_sos2motemp_P = numeric(), sos_sos2motemp_SLOPE = numeric(),
+  gsl_max5motemp_F = numeric(), gsl_max5motemp_P = numeric(), gls_max5motemp_SLOPE = numeric(),
+  maxNDVI_max5motemp_F = numeric(), maxNDVI_max5motemp_P = numeric(), maxNDVI_max5motemp_SLOPE = numeric(),
+  
+  sos_sos2moprecip_F = numeric(), sos_sos2moprecip_P = numeric(), sos_sos2moprecip_SLOPE = numeric(),
+  gsl_max5moprecip_F = numeric(), gsl_max5moprecip_P = numeric(), gls_max5moprecip_SLOPE = numeric(),
+  maxNDVI_max5moprecip_F = numeric(), maxNDVI_max5moprecip_P = numeric(), maxNDVI_max5moprecip_SLOPE = numeric(),
+
+  gsl_maxNDVI_F = numeric(), gsl_maxNDVI_P = numeric(), gsl_maxNDVI_SLOPE = numeric())
+
+
+eachyr <- climate_anom_df %>% select(-includeCHANGE, -Value) %>%
+  pivot_wider(values_from = Anomaly, names_from = Type) %>% filter(Stat == "P value") %>%
+  inner_join(NutNetPheno_wide) %>%
+  select(site, gs, 
+         ChangeSOS, ChangeEOS, anom_2moTemp_sos,anom_2moPrecip_sos, 
+         ChangeGSL, anom_5moTemp_max, anom_5moPrecip_max,
+         GSLength, Change_ndvi_max) %>%
+  full_join(longtermsites %>% select(-sitenum)) %>%
+  filter(!is.na(anom_2moTemp_sos)) %>%
+  mutate(ChangeGSL = as.numeric(ChangeGSL),
+         GSLength = as.numeric(GSLength))
+```
+
+    ## Joining, by = c("site", "gs")Joining, by = "site"
+
+``` r
+anom_statssite_summary <- ANOM_statsdataframe
+for (i in c(1:nrow(longtermsites))) {
+  a <- i
+  sitefilter <- eachyr %>% filter(sitenum2 == a)
+  
+  anom_sosmod<-if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {
+    lm(ChangeSOS ~ anom_2moTemp_sos, data = filter(sitefilter))
+  } else {anom_sosmod <- ANOM_statsdataframe}
+   sos_sos2motemp_F <-   if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {Anova(anom_sosmod)$`F value`[1]} else {NA}
+   sos_sos2motemp_P <-   if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {Anova(anom_sosmod)$`Pr(>F)`[1]} else {NA}
+  sos_sos2motemp_SLOPE <- if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) { anom_sosmod$coefficients[2] } else {NA}
+    # sitefilter %>% ggplot(aes(x = anom_2moTemp_sos, y = ChangeSOS)) + geom_point()+geom_smooth(method = "lm")
+    # Anova(lm(ChangeSOS ~ anom_2moTemp_sos, data = sitefilter))
+    
+  anom_maxmod<-if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {
+    lm(ChangeGSL ~ anom_5moTemp_max, data = filter(sitefilter))
+  } else {anom_maxmod <- ANOM_statsdataframe}
+   gsl_max5motemp_F <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(anom_maxmod)$`F value`[1]} else {NA}
+   gsl_max5motemp_P <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(anom_maxmod)$`Pr(>F)`[1]} else {NA}
+   gsl_max5motemp_SLOPE <- if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) { anom_maxmod$coefficients[2] } else {NA}
+  
+  anom_maxNDVImod<-if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {
+    lm(Change_ndvi_max ~ anom_5moTemp_max, data = filter(sitefilter))
+  } else {anom_maxNDVImod <- ANOM_statsdataframe}
+   maxNDVI_max5motemp_F <-   if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {Anova(anom_maxNDVImod)$`F value`[1]} else {NA}
+   maxNDVI_max5motemp_P <-   if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {Anova(anom_maxNDVImod)$`Pr(>F)`[1]} else {NA}
+  maxNDVI_max5motemp_SLOPE <- if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) { anom_maxNDVImod$coefficients[2] } else {NA}
+  
+  anom_sos_sos2moprecip_mod<-if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {
+    lm(ChangeSOS ~ anom_2moPrecip_sos, data = filter(sitefilter))
+  } else {anom_sos_sos2moprecip_mod <- ANOM_statsdataframe}
+   sos_sos2moprecip_F <-   if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {Anova(anom_sos_sos2moprecip_mod)$`F value`[1]} else {NA}
+   sos_sos2moprecip_P <-   if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) {Anova(anom_sos_sos2moprecip_mod)$`Pr(>F)`[1]} else {NA}
+  sos_sos2moprecip_SLOPE <- if (nrow(filter(sitefilter, !is.na(ChangeSOS))) > 2) { anom_sos_sos2moprecip_mod$coefficients[2] } else {NA}
+  
+  anom_maxprecipmod<-if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {
+    lm(ChangeGSL ~ anom_5moPrecip_max, data = filter(sitefilter))
+  } else {anom_maxprecipmod <- ANOM_statsdataframe}
+   gsl_max5moprecip_F <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(anom_maxprecipmod)$`F value`[1]} else {NA}
+   gsl_max5moprecip_P <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(anom_maxprecipmod)$`Pr(>F)`[1]} else {NA}
+   gsl_max5moprecip_SLOPE <- if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) { anom_maxprecipmod$coefficients[2] } else {NA}
+  
+  anom_maxNDVIprecipmod<-if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {
+    lm(Change_ndvi_max ~ anom_5moPrecip_max, data = filter(sitefilter))
+  } else {anom_maxNDVIprecipmod <- ANOM_statsdataframe}
+   maxNDVI_max5moprecip_F <-   if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {Anova(anom_maxNDVIprecipmod)$`F value`[1]} else {NA}
+   maxNDVI_max5moprecip_P <-   if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) {Anova(anom_maxNDVIprecipmod)$`Pr(>F)`[1]} else {NA}
+  maxNDVI_max5moprecip_SLOPE <- if (nrow(filter(sitefilter, !is.na(Change_ndvi_max))) > 2) { anom_maxNDVIprecipmod$coefficients[2] } else {NA}
+  
+  gsl_maxNDVImod<-if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {
+    lm(Change_ndvi_max ~ ChangeGSL, data = filter(sitefilter))
+  } else {gsl_maxNDVImod <- ANOM_statsdataframe}
+   gsl_maxNDVI_F <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(gsl_maxNDVImod)$`F value`[1]} else {NA}
+   gsl_maxNDVI_P <-   if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) {Anova(gsl_maxNDVImod)$`Pr(>F)`[1]} else {NA}
+   gsl_maxNDVI_SLOPE <- if (nrow(filter(sitefilter, !is.na(ChangeGSL))) > 2) { gsl_maxNDVImod$coefficients[2] } else {NA}  
+  
+  
+  stats <- tibble(a, sos_sos2motemp_F, sos_sos2motemp_P, sos_sos2motemp_SLOPE,
+                  gsl_max5motemp_F, gsl_max5motemp_P, gsl_max5motemp_SLOPE,
+                  maxNDVI_max5motemp_F, maxNDVI_max5motemp_P, maxNDVI_max5motemp_SLOPE,
+                  
+                  sos_sos2moprecip_F, sos_sos2moprecip_P, sos_sos2moprecip_SLOPE,
+                  gsl_max5moprecip_F, gsl_max5moprecip_P, gsl_max5moprecip_SLOPE,
+                  maxNDVI_max5moprecip_F, maxNDVI_max5moprecip_P, maxNDVI_max5moprecip_SLOPE,
+                  
+                  gsl_maxNDVI_F, gsl_maxNDVI_P, gsl_maxNDVI_SLOPE)
+  anom_statssite_summary <- rbind (stats, anom_statssite_summary)
+}
+
+anom_vs_climate <- anom_statssite_summary %>%
+  transmute(sitenum2 = a,
+    ChangeSOS_TempAnom_2mo_sos_pvalue = sos_sos2motemp_P, 
+         ChangeSOS_TempAnom_2mo_sos_slope = sos_sos2motemp_SLOPE,
+         ChangeSOS_PrecipAnom_2mo_sos_pvalue = sos_sos2moprecip_P,
+         ChangeSOS_PrecipAnom_2mo_sos_slope = sos_sos2moprecip_SLOPE,
+         
+         Change_ndvi_max_TempAnom_5mo_max_pvalue = maxNDVI_max5motemp_P,
+         Change_ndvi_max_TempAnom_5mo_max_slope = maxNDVI_max5motemp_SLOPE,
+         Change_ndvi_max_PrecipAnom_5mo_max_pvalue = maxNDVI_max5moprecip_P,
+         Change_ndvi_max_PrecipAnom_5mo_max_slope = maxNDVI_max5moprecip_SLOPE,
+         Change_ndvi_max_ChangeGSL_pvalue = gsl_maxNDVI_P,
+         Change_ndvi_max_ChangeGSL_slope = gsl_maxNDVI_SLOPE,
+         
+         ChangeGSL_TempAnom_5mo_max_pvalue= gsl_max5motemp_P,
+         ChangeGSL_TempAnom_5mo_max_slope= gsl_max5motemp_SLOPE,
+         ChangeGSL_PrecipAnom_5mo_max_pvalue= gsl_max5moprecip_P,
+         ChangeGSL_PrecipAnom_5mo_max_slope= gsl_max5moprecip_SLOPE) %>%
+    full_join((longtermsites %>% select(-sitenum))) %>%
+  select(-sitenum2)
+```
+
+    ## Joining, by = "sitenum2"
 
 # Make final dataframes
 
@@ -760,16 +898,10 @@ ANPP = `-119.3883112` + maxNDVI \* `785.0950005`
 
 Here are some other analyses you might want to do….
 
-## Some of the world is greening
-
-First, show that there has been a directional, temporal shift towards
-“greening” and earlier springs since \~1980.
+## Table 1 - repeated measures (phenological change through time)
 
 ``` r
-Anova(lmer(Change_ndvi_max ~ 
-             site * gs + 
-             (1|gs), 
-           data = filter(df_annual, !is.na(Change_ndvi_max))))
+Anova(lmer(Change_ndvi_max ~ site*gs + (1|gs), data = filter(df_annual, !is.na(Change_ndvi_max))))
 ```
 
     ## Analysis of Deviance Table (Type II Wald chisquare tests)
@@ -782,26 +914,123 @@ Anova(lmer(Change_ndvi_max ~
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
+``` r
+Anova(lmer(ChangeSOS ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeSOS))))
+```
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: ChangeSOS
+    ##            Chisq  Df Pr(>Chisq)    
+    ## site     26.3323 107   1.000000    
+    ## gs        7.2507   1   0.007087 ** 
+    ## site:gs 236.5462 107  8.775e-12 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+``` r
+Anova(lmer(ChangeEOS ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeEOS))))
+```
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: ChangeEOS
+    ##            Chisq  Df Pr(>Chisq)    
+    ## site     32.0122 107     1.0000    
+    ## gs        1.2023   1     0.2729    
+    ## site:gs 199.7975 107  1.375e-07 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+``` r
+Anova(lmer(as.numeric(ChangeGSL) ~ site*gs + (1|gs), data = filter(df_annual, !is.na(ChangeGSL))))
+```
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: as.numeric(ChangeGSL)
+    ##            Chisq  Df Pr(>Chisq)    
+    ## site     44.2438 107    1.00000    
+    ## gs        4.6537   1    0.03099 *  
+    ## site:gs 284.5217 107    < 2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+### Some of the world is greening
+
+There has been a directional, temporal shift towards “greening” and
+earlier springs since \~1980.
+
+![](ReadMe_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+
+### Annual phenology change + annual weather changes
+
+There has been a directional, temporal shift towards “greening” and
+earlier springs since \~1980.
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: ChangeSOS
+    ##                   Chisq Df Pr(>Chisq)    
+    ## TempAnom_2mo_sos 22.323  1  2.304e-06 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: Change_ndvi_max
+    ##                   Chisq Df Pr(>Chisq)
+    ## TempAnom_5mo_max 2.3149  1     0.1281
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: as.numeric(ChangeGSL)
+    ##                   Chisq Df Pr(>Chisq)  
+    ## TempAnom_5mo_max 2.9217  1     0.0874 .
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: ChangeSOS
+    ##                     Chisq Df Pr(>Chisq)    
+    ## PrecipAnom_2mo_sos 22.175  1  2.489e-06 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: Change_ndvi_max
+    ##                     Chisq Df Pr(>Chisq)    
+    ## PrecipAnom_5mo_max 73.892  1  < 2.2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+    ## Analysis of Deviance Table (Type II Wald chisquare tests)
+    ## 
+    ## Response: as.numeric(ChangeGSL)
+    ##                     Chisq Df Pr(>Chisq)    
+    ## PrecipAnom_5mo_max 77.429  1  < 2.2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
 ![](ReadMe_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
 ## PCAs
 
 Could be a useful part of the fishing expedition…
 
-![](ReadMe_files/figure-gfm/PCAs-1.png)<!-- -->
-
-    ## [1] 84
-
-    ## [1] 53
-
-![](ReadMe_files/figure-gfm/PCAs-2.png)<!-- -->
-
-    ## [1] 53
+![](ReadMe_files/figure-gfm/PCAs-1.png)<!-- -->![](ReadMe_files/figure-gfm/PCAs-2.png)<!-- -->
 
 In looking at sites which have *most* site-level data, there are `84`
 sites.
 
-![](ReadMe_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+If we want to look at soil nutrient levels, there are only `53` sites
+with complete data.
+
+## was trying to make gsl + temp anom with trendline if sig relationshiop….
+
+![](ReadMe_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
 ## NutNet 2020 discussions
 
