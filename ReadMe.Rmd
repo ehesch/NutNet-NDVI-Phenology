@@ -45,6 +45,8 @@ localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_NutNet phenology/pheno_lo
 process_raw_ndvi <- FALSE #TRUE
 
 merge_climate_ndvi <- FALSE #TRUE
+
+create_final_df <- FALSE #if this is TRUE, you will need to connect to dropbox
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -427,6 +429,8 @@ ClimChange %>%
 Additionally, note that the new data in the NutNet dropbox allows us to better look at *change* in N deposition over time. Since we are evaluating phenological/NDVI change over time as well, this seems like a logical addition. 
 
 ```{r ndep, echo=F, include=F}
+if (create_final_df == TRUE) {
+
 # ndep <- raster(paste0(localdir, '/N-deposition1993.tif'),
 #                crs = '+init=EPSG:4326')
 # crs(ndep) <- CRS('+init=EPSG:4326') #https://epsg.io/4326
@@ -449,6 +453,10 @@ ndep <- read_csv(paste0(dropboxdir, "/site-n-deposition-07-December-2020.csv")) 
   separate(site_code, into = c("site", "b"), sep = "[.]") %>%
   dplyr::select(-b)
 
+} else {
+  print("not creating final data sets")
+}
+
 ```
 
 ## Biomass, richness, etc.
@@ -460,7 +468,9 @@ Additionally, process observational year data on species evenness.
 To connect on-the-ground biomass measurements with NDVI, also extract the average biomass (ANPP) for all control plots for all years available. 
 
 ```{r siteinfo, echo=F, message=F, warning=F}
-dropbox <- read_csv(paste0(dropboxdir, "/comb-by-plot-clim-soil-diversity-07-December-2020.csv"),
+if (create_final_df == TRUE) {
+
+  dropbox <- read_csv(paste0(dropboxdir, "/comb-by-plot-clim-soil-diversity-07-December-2020.csv"),
   col_types = cols(),
   na = c("NULL", "NA")
 )
@@ -542,6 +552,10 @@ sitenpp %>%
   facet_wrap(~ Msmr, scales = "free") +
   theme_cowplot() +
   labs(x = "", title = "Biomass Production")
+
+} else {
+  print("not creating final data sets")
+}
 ```
 
 
@@ -1838,12 +1852,12 @@ grow = 1980
 
 # Determine sites to use in analysis
 
-Given that we are looking at long-term trends, it doesn't make much sense to include sites which only have a minimal amount of years were we could extract meaninfulphenological dates. Reasons that sites might not have enough years include: satellites had poor coverage of location (esp true in earlier landsats), too much cloud cover (and thus couldn't fit a nice trend/too few images during growing season), site never "greened-up" threshold during a given year (important esp for Mediterranean sites, and probably other reasons.
-
-Here  is the list of sites which made the cut. Of course, as PIs confirm/add/remove site lat/long, this list will change. 
+Given that we are looking at long-term trends, it doesn't make much sense to include sites which only have a minimal amount of years were we could extract meaningful phenological dates. Reasons that sites might not have enough years include: satellites had poor coverage of location (esp true in earlier Landsats), too much cloud cover (and thus couldn't fit a nice trend/too few images during growing season), site never "greened-up" threshold during a given year (important esp for Mediterranean sites, and probably other reasons.
 
 ```{r filtershorttermsites, echo=F, message=F, warning=F}
-longtermsites <- NutNetPheno_wide %>%
+if (create_final_df == TRUE) {
+
+  longtermsites <- NutNetPheno_wide %>%
   filter(!is.na(GSLength)) %>%
   group_by(site) %>%
   summarise(N = n()) %>%
@@ -1857,6 +1871,11 @@ longtermsites <- NutNetPheno_wide %>%
 write_csv(longtermsites, './longtermsites.csv')
 
 levels(as.factor(longtermsites$site))
+
+
+} else {
+  print("not creating final data sets")
+}
 ```
 
 # Merge climate data with phenology data
@@ -2533,8 +2552,11 @@ Please see excel sheet for metadata/column descriptions
 
 These two data frames can be combined into a `df_merge`.
 
+See the sites which are included in this final analysis. 
+
 
 ```{r finaldfs, echo=F, message=F, warning=F}
+if (create_final_df == TRUE) {
 
 #this is site summary
  df_site <-   (longtermsites %>% mutate(check = "included") %>% dplyr::select(site, check)) %>%
@@ -2607,6 +2629,20 @@ df_annual <- NutNetPheno_wide  %>%
 
 df_merge <- df_annual %>% full_join(df_site)
 
+
+write_csv(df_annual, 'df_annual.csv')
+write_csv(df_site, 'df_site.csv')
+write_csv(df_merge, 'df_merge.csv')
+
+} else {
+  print("not creating final data sets")
+}
+
+df_annual <- read_csv("./df_annual.csv", col_types = cols())
+df_site <- read_csv("./df_site.csv", col_types = cols())
+df_merge <- read_csv("./df_merge.csv", col_types = cols())
+
+(filter(df_site, check== "included")$site)
 ```
 
 

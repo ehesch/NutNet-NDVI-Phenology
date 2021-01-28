@@ -60,6 +60,8 @@ localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_NutNet phenology/pheno_lo
 process_raw_ndvi <- FALSE #TRUE
 
 merge_climate_ndvi <- FALSE #TRUE
+
+create_final_df <- FALSE #if this is TRUE, you will need to connect to dropbox
 ```
 
 # Process weather & climate data
@@ -147,7 +149,7 @@ To connect on-the-ground biomass measurements with NDVI, also extract
 the average biomass (ANPP) for all control plots for all years
 available.
 
-![](ReadMe_files/figure-gfm/siteinfo-1.png)<!-- -->
+    ## [1] "not creating final data sets"
 
 # Process the Landsat NDVI data
 
@@ -332,34 +334,14 @@ start/end at each site to get change over time
 
 Given that we are looking at long-term trends, it doesn’t make much
 sense to include sites which only have a minimal amount of years were we
-could extract meaninfulphenological dates. Reasons that sites might not
-have enough years include: satellites had poor coverage of location (esp
-true in earlier landsats), too much cloud cover (and thus couldn’t fit a
-nice trend/too few images during growing season), site never
+could extract meaningful phenological dates. Reasons that sites might
+not have enough years include: satellites had poor coverage of location
+(esp true in earlier Landsats), too much cloud cover (and thus couldn’t
+fit a nice trend/too few images during growing season), site never
 “greened-up” threshold during a given year (important esp for
 Mediterranean sites, and probably other reasons.
 
-Here is the list of sites which made the cut. Of course, as PIs
-confirm/add/remove site lat/long, this list will change.
-
-    ##  [1] "abisko"    "amcamp"    "arch"      "azitwo"    "badlau"   
-    ##  [6] "bari"      "barta"     "bayr"      "bldr"      "bnbt"     
-    ## [11] "bnch"      "bogong"    "bttr"      "bunya"     "burrawan" 
-    ## [16] "burren"    "bynb"      "cbgb"      "cdcr"      "cdpt"     
-    ## [21] "chilcas"   "comp"      "cowi"      "derr"      "doane"    
-    ## [26] "elkh"      "elliot"    "elva"      "ethamc"    "frue"     
-    ## [31] "gilb"      "glac"      "glcr"      "hall"      "hart"     
-    ## [36] "hast"      "hero"      "hopl"      "jasp"      "jorn"     
-    ## [41] "kark"      "kbs"       "kibber"    "kidman"    "kilp"     
-    ## [46] "kiny"      "kirik"     "koffler"   "konz"      "lagoas"   
-    ## [51] "lake"      "lancaster" "lead"      "look"      "lubb"     
-    ## [56] "marc"      "mcdan"     "mcla"      "mitch"     "msla"     
-    ## [61] "msum"      "mtca"      "nilla"     "ping"      "pinj"     
-    ## [66] "potrok"    "sage"      "saline"    "sedg"      "sereng"   
-    ## [71] "sevi"      "sgs"       "shps"      "sier"      "smith"    
-    ## [76] "spv"       "summ"      "temple"    "ucsc"      "ukul"     
-    ## [81] "unc"       "uwo"       "valm"      "vargrass"  "vass"     
-    ## [86] "yarra"
+    ## [1] "not creating final data sets"
 
 # Merge climate data with phenology data
 
@@ -491,6 +473,29 @@ richness.
 Please see excel sheet for metadata/column descriptions
 
 These two data frames can be combined into a `df_merge`.
+
+See the sites which are included in this final analysis.
+
+    ## [1] "not creating final data sets"
+
+    ##  [1] "abisko"    "amcamp"    "arch"      "azitwo"    "badlau"   
+    ##  [6] "bari"      "barta"     "bayr"      "bldr"      "bnbt"     
+    ## [11] "bnch"      "bogong"    "bttr"      "bunya"     "burrawan" 
+    ## [16] "burren"    "bynb"      "cbgb"      "cdcr"      "cdpt"     
+    ## [21] "chilcas"   "comp"      "cowi"      "derr"      "doane"    
+    ## [26] "elkh"      "elliot"    "elva"      "ethamc"    "frue"     
+    ## [31] "gilb"      "glac"      "glcr"      "hall"      "hart"     
+    ## [36] "hast"      "hero"      "hopl"      "jasp"      "jorn"     
+    ## [41] "kark"      "kbs"       "kibber"    "kidman"    "kilp"     
+    ## [46] "kiny"      "kirik"     "koffler"   "konz"      "lagoas"   
+    ## [51] "lake"      "lancaster" "lead"      "look"      "lubb"     
+    ## [56] "marc"      "mcdan"     "mcla"      "mitch"     "msla"     
+    ## [61] "msum"      "mtca"      "nilla"     "ping"      "pinj"     
+    ## [66] "potrok"    "sage"      "saline"    "sedg"      "sereng"   
+    ## [71] "sevi"      "sgs"       "shps"      "sier"      "smith"    
+    ## [76] "spv"       "summ"      "temple"    "ucsc"      "ukul"     
+    ## [81] "unc"       "uwo"       "valm"      "vargrass"  "vass"     
+    ## [86] "yarra"
 
 # Start analysis
 
