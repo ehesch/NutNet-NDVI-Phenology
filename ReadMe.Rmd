@@ -3224,7 +3224,8 @@ pca_data <- df_merge %>%
          Elevation, RainMAP, TempMAT, 
          Richness, FractionExotic,
          ndep_change_2016_1984) %>%
-  filter(!is.na(ChangeGSL), !is.na(PrecipAnom_2mo_sos), !is.na(Elevation), !is.na(FractionExotic)) %>%#, !is.na(MeanAsynch)))
+  filter(!is.na(ChangeGSL), !is.na(PrecipAnom_2mo_sos), !is.na(Elevation), !is.na(FractionExotic),
+         !is.na(TempAnom_5mo_max)) %>%#, !is.na(MeanAsynch)))
   mutate(ChangeGSL = as.numeric(ChangeGSL))
 
 data.rda <- rda(pca_data[,-1], scale=TRUE)
@@ -3245,7 +3246,9 @@ pca_soil_data <- df_merge %>%
          ndep_change_2016_1984, 
          SoilN, SoilP, SoilC, SoilK) %>%
   mutate(ChangeGSL = as.numeric(ChangeGSL)) %>%
-  filter(!is.na(ChangeGSL), !is.na(PrecipAnom_2mo_sos), !is.na(Elevation), !is.na(FractionExotic)) %>%#, !is.na(MeanAsynch)))
+  filter(!is.na(ChangeGSL), !is.na(PrecipAnom_2mo_sos), !is.na(Elevation), !is.na(FractionExotic),
+         !is.na(TempAnom_5mo_max),
+         !is.na(SoilN)) %>%#, !is.na(MeanAsynch)))
   filter(!is.na(SoilP))#, !is.na(MeanAsynch))
 
 soildata.rda <- rda(pca_soil_data[,-1], scale=TRUE)
