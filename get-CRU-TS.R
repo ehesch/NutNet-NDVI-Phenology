@@ -11,8 +11,8 @@ require(lubridate)
 require(chron)
 require(raster)
 
-## cru data from http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.03/data/tmp
-# and from http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.03/data/pre
+## cru data from http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/tmp
+# and from http://data.ceda.ac.uk/badc/cru/data/cru_ts/cru_ts_4.04/data/pre
 # list.files('../data/CRU')
 
 ncfile <-

@@ -40,14 +40,14 @@ In all cases, intermediate (processed) files *are* stored on GitHub. However, yo
 ```{r filelocations, }
 dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
-process_raw_climate <- FALSE # TRUE
+process_raw_climate <- TRUE #FALSE # TRUE
 localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_NutNet phenology/pheno_localdata" #set this if processing_raw_climate == TRUE
 
-process_raw_ndvi <- FALSE #TRUE
+process_raw_ndvi <- TRUE #FALSE #TRUE
 
-merge_climate_ndvi <- FALSE #TRUE
+merge_climate_ndvi <- TRUE #FALSE #TRUE
 
-create_final_df <- FALSE #if this is TRUE, you will need to connect to dropbox
+create_final_df <- TRUE #FALSE #if this is TRUE, you will need to connect to dropbox
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -573,7 +573,43 @@ In goggle earth engine, the following was run. Apologies that it's long, messy, 
 
 **NOTE** the lat/longs were "found" by using the `/Dropbox/NutNet data/sites-02-August-2019.csv`. NOT all of the sites have data in the `comb-by-plot-clim-soil-diversity-07-December-2020.csv` file (and so will subsequently be excluded). 
 
+If lat/long of certain sites need to be updated, do so in the excel file below. Make sure to note which sites have been updated, or else Google Earth Engine will make your life (slightly) miserable. If you know which sites you need to run again, it's much better.
+
+```{r echo=T}
+process_site_lat_long <- FALSE
+```
+
+
+```{r makeshaefile, echo = F}
+process_site_latlong <- FALSE
+
+if (process_site_latlong == TRUE)
+{
+library(tidyverse)
+library(sf)
+library(leaflet)
+sites <- read_csv('./data/site_check_2020.9.23.csv') %>%
+  filter(!is.na(long), !is.na(lat)) %>%
+  select(-X1) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4326) %>% 
+  st_transform(3857) %>% #http://epsg.io/3857 uom = meter
+  st_buffer(dist = 30) %>%
+  st_transform(4326) #for leaflet
+
+leaflet() %>%
+  addTiles() %>%
+  addPolygons(data = sites)
+
+st_write(sites, "./data/site_shapefiles/sites.shp", append = FALSE)
+} else {}
+
+```
+
 ```GEE code not shown here due to length, but feel free to look at it in the markdown file```
+
+
+
+
 ```{r geecode, eval=F, include=F, echo=F}
 
 # ## GEE code
