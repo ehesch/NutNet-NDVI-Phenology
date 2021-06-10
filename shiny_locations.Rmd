@@ -1,0 +1,55 @@
+---
+title: "nutnet location shiny"
+author: "Ellen"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+# output:
+#   word_document: default
+#   pdf_document: default
+#   html_document: default
+# output: 
+#   github_document:
+#     toc: true
+urlcolor: blue
+runtime: shiny
+---
+
+# NutNet sites included in 40 years of phenological trends
+
+Zoom into your site, and click on the point. Confirm the name is correct and that the location is adjacent to your treatment plots. We don't want the point (shown with a 30 meter buffer) to overlap your treatment plots (so we don't need to worry about the influence of herbivore or nutrients influences phenology since the treatments were initiated), but we do want the point to be immediately adjacent to your site (so that the vegetation is similar, etc.) 
+
+```{r setup, include = F}
+knitr::opts_chunk$set(echo = FALSE, message = F, warning = F)
+
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(isoband)
+```
+
+
+```{r shinyapp}
+sites <- read_csv('./data/site_check_2020.9.23.csv') %>%
+  filter(!is.na(long), !is.na(lat)) %>%
+  select(-X1) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4326) %>% 
+  st_transform(3857) %>% #http://epsg.io/3857 uom = meter
+  st_buffer(dist = 30) %>%
+  st_transform(4326) #for leaflet
+
+leaflet() %>%
+  addProviderTiles(provider = providers$Esri.WorldImagery) %>%
+  addPolygons(data = sites,
+              stroke = TRUE,
+              color = "red",
+              highlightOptions = highlightOptions(
+                         stroke = TRUE,
+                         color = "white",
+                         weight = 6,
+                         bringToFront = TRUE,
+                         opacity = 1
+                       ),
+    popup = ~paste0("site name: ", sites$site_code))
+
+# st_write(sites, "./data/site_shapefiles/sites.shp", append = FALSE)
+
+```

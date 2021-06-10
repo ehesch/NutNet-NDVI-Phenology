@@ -1,0 +1,12 @@
+name: nutnet_pheno_locations
+title: nutnet_pheno_locations
+username:
+account: ehe1
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4254441
+bundleId: 4702089
+url: https://ehe1.shinyapps.io/nutnet_pheno_locations/
+when: 1623346540.80373
+asMultiple: FALSE
+asStatic: FALSE
