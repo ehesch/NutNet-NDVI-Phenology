@@ -40,14 +40,14 @@ In all cases, intermediate (processed) files *are* stored on GitHub. However, yo
 ```{r filelocations, }
 dropboxdir <- "/Users/ellen/Dropbox/NutNet data"
 
-process_raw_climate <- TRUE #FALSE # TRUE
+process_raw_climate <- FALSE # TRUE
 localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_NutNet phenology/pheno_localdata" #set this if processing_raw_climate == TRUE
 
-process_raw_ndvi <- TRUE #FALSE #TRUE
+process_raw_ndvi <- FALSE #TRUE
 
-merge_climate_ndvi <- TRUE #FALSE #TRUE
+merge_climate_ndvi <- FALSE #TRUE
 
-create_final_df <- TRUE #FALSE #if this is TRUE, you will need to connect to dropbox
+create_final_df <- FALSE #if this is TRUE, you will need to connect to dropbox
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -471,7 +471,7 @@ To connect on-the-ground biomass measurements with NDVI, also extract the averag
 ```{r siteinfo, echo=F, message=F, warning=F}
 if (create_final_df == TRUE) {
 
-  dropbox <- read_csv(paste0(dropboxdir, "/comb-by-plot-clim-soil-diversity-07-December-2020.csv"),
+  dropbox <- read_csv(paste0(dropboxdir, "/comb-by-plot-clim-soil-diversity-06-May-2021.csv"),
   col_types = cols(),
   na = c("NULL", "NA")
 )
@@ -601,7 +601,7 @@ leaflet() %>%
   addPolygons(data = sites)
 
 st_write(sites, "./data/site_shapefiles/sites.shp", append = FALSE)
-} else {}
+} else {print("Not updating site lat/longs")}
 
 ```
 
@@ -1266,7 +1266,15 @@ if (process_raw_ndvi == TRUE) {
     mutate(file_contents = map(
       filename,
       ~ read_csv(file.path(pheno_path, .),
-        skip = 2, col_type = cols(), col_names = FALSE
+        skip = 2, col_type = cols(filename = col_character(),
+                                  X1 = col_character(),
+                                  X2 = col_character(),
+                                  X3 = col_double(),
+                                  X4 = col_double(),
+                                  X5 = col_double(),
+                                  X6 = col_double(),
+                                  X7 = col_logical()), 
+        col_names = FALSE
       )
     )) %>%
     unnest() %>%
@@ -1288,6 +1296,9 @@ if (process_raw_ndvi == TRUE) {
     full_join(landsat_codes) %>%
     filter(action == "keep") %>% # remove=='keep') %>%
     filter(!is.na(NDVI), !is.na(BQA)) %>%
+    mutate(NDVI = case_when(ls == "ls8" ~ (NDVI - 0.0306) / 0.9824,
+                           TRUE ~ NDVI)) %>% #roy et al 2016; https://www.sciencedirect.com/science/article/pii/S0034425715302455
+ 
     group_by(site, Date) %>%
     summarise(NDVI = mean(NDVI)) %>%
     mutate(NDVI = if_else(NDVI < 0, 0, NDVI)) %>%
@@ -1303,6 +1314,7 @@ if (process_raw_ndvi == TRUE) {
 ```{r getShoulderSeasonsTroughs, eval = T, echo = F, message = F, warning = F}
 if (process_raw_ndvi == TRUE) {
 
+  END_YR <- 2021
   # first need to fit a single cubic spline to all data, and then get the average date which has the minimum NDVI
   min_ndvi_name <- levels(as.factor(pheno_data$site)) %>%
     tibble() %>%
@@ -1364,7 +1376,7 @@ if (process_raw_ndvi == TRUE) {
 
   # assign growing season
   GSmain <- siteinfo %>%
-    full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
+    full_join(tibble(site = rep(siteinfo$site, each = (END_YR - 1981)), year = rep(1982:END_YR, (nrow(siteinfo))))) %>%
     mutate(
       startyr = ifelse(Start > 182, year - 1, (year)),
       normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
@@ -1390,7 +1402,7 @@ if (process_raw_ndvi == TRUE) {
 
   # add 90 days pre/post growing season
   GSearly <- siteinfo %>%
-    full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
+    full_join(tibble(site = rep(siteinfo$site, each = (END_YR - 1981)), year = rep(1982:END_YR, (nrow(siteinfo))))) %>%
     mutate(
       startyr = ifelse(Start > 182, year - 1, (year)),
       normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
@@ -1416,7 +1428,7 @@ if (process_raw_ndvi == TRUE) {
     arrange(site, GrowingSeason, Date)
 
   GSlate <- siteinfo %>%
-    full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
+    full_join(tibble(site = rep(siteinfo$site, each = (END_YR - 1981)), year = rep(1982:END_YR, (nrow(siteinfo))))) %>%
     mutate(
       startyr = ifelse(Start > 182, year - 1, (year)),
       normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
@@ -1443,7 +1455,7 @@ if (process_raw_ndvi == TRUE) {
     arrange(site, GrowingSeason, Date)
 
   GScutoffs <- siteinfo %>%
-    full_join(tibble(site = rep(siteinfo$site, each = (2019 - 1981)), year = rep(1982:2019, (nrow(siteinfo))))) %>%
+    full_join(tibble(site = rep(siteinfo$site, each = (END_YR - 1981)), year = rep(1982:END_YR, (nrow(siteinfo))))) %>%
     mutate(
       startyr = ifelse(Start > 182, year - 1, (year)),
       normalstart = paste(startyr, month(as_date(Start)), day(as_date(Start)), sep = "-"),
@@ -1582,7 +1594,7 @@ for (i in c(1:nrow(siteinfo2))) {
         mutate(norm.first.deriv = ((1--1) / (max(first.deriv) - min(first.deriv)) * (first.deriv - max(first.deriv)) + 1))
     } else {NA}
     
-    smoothed.data <- if(nrow(filter(gs.filter, GSType == 'mainGS'))>= measurementscutoff) {
+    smoothed.data <- if(nrow(filter(gs.filter, GSType == 'mainGS')) >= measurementscutoff) {
       full_join(ndvi, first.deriv, by = "x") %>%
         mutate(Date = as_date(x)) %>% #as.Date
         mutate(change.ndvi = (ndvi - lag(ndvi, n = 1L))) %>%
@@ -1590,7 +1602,8 @@ for (i in c(1:nrow(siteinfo2))) {
         mutate(Julian = yday(Date)) %>%
         mutate(sitenum = a) %>%
         left_join(siteinfo2, by = 'sitenum')
-    } else {emptydataframe}
+    } else {emptydataframe %>% mutate(Max50 = numeric(),
+                                      change.ndvi = numeric())}
     
     GreenUpDate <- if (nrow(smoothed.data %>% 
                             filter(first.deriv > 0, 
@@ -1610,18 +1623,18 @@ for (i in c(1:nrow(siteinfo2))) {
     if (nrow(GreenUpDate) > 0) { GreenUpDate$gs <- gs } else { GreenUpDate$gs <- numeric(0) }
     if (nrow(GreenUpDate) > 0) { GreenUpDate$sitenum <- a } else { GreenUpDate$sitenum <- numeric(0) }
     
-    max <- if (nrow(GreenUpDate) >0 ) {
+    max <- if (nrow(GreenUpDate) > 0 ) {
       smoothed.data %>% filter(Date > GreenUpDate$Date, 
                                Date <= max(gs.filter$Date[gs.filter$GSType=='mainGS']) ) %>% 
         .[which.max(.$ndvi), ]
     } else {
-      (filter(smoothed.data, 
+      (filter((smoothed.data),# %>% mutate(change.ndvi = numeric())), 
               Date > (max(gs.filter$normalstart) + 60),
               Date < (max(gs.filter$normalend) - 60),
               change.ndvi > 0 )) %>%
         .[which.max(.$ndvi),]  }
     if (nrow(max) > 0) { max$Type <- "max" } else { max$Type <- character(0) }
-    if (nrow(max) > 0) { max$gs <- gs } else { max$gs <- character(0) }
+    if (nrow(max) > 0) { max$gs <- gs } else { max$gs <- numeric(0) }
     if (nrow(max) > 0) { max$sitenum <- a } else { max$sitenum <- numeric(0) }
     
     SenescenseDate <- if (nrow(GreenUpDate) > 0) {
@@ -1709,8 +1722,8 @@ AVG_nnp<-
   spread(Type, JulAGV) 
 
 redial<- AVG_nnp %>%
-  full_join( tibble(site = rep(AVG_nnp$site, each = (2019 - 1981)), 
-                    year = rep(1982:2019, (nrow(AVG_nnp)))),  
+  full_join( tibble(site = rep(AVG_nnp$site, each = (END_YR - 1981)), 
+                    year = rep(1982:END_YR, (nrow(AVG_nnp)))),  
              by = 'site') %>% 
   rename(maxJul = max,
          sosJul = `green-up date`,
@@ -1929,10 +1942,11 @@ This plot simply shows sites which have seen a significant trend in temperatures
 if (merge_climate_ndvi == TRUE) {
 
 ###
-# Must make full df with all possible climate change dates (1984 - 2019 growing seasons)
+# Must make full df with all possible climate change dates (1984 - END_YR growing seasons)
 ####
-CLIMYRS <- tibble(gs = rep(c(1984:2019), nrow(longtermsites)),
-       site = rep(longtermsites$site, each = (2019-1983)))
+  END_YR <- 2021
+CLIMYRS <- tibble(gs = rep(c(1984:END_YR), nrow(longtermsites)),
+       site = rep(longtermsites$site, each = (END_YR-1983)))
 
 CLIMYRS_ALL <- NutNetPheno_wide %>%
   group_by(site) %>% summarise(gs = min(gs)) %>%
@@ -2265,6 +2279,35 @@ for (i in c(1:nrow(longtermsites))) {
                   max9moPrecipF, max9moPrecipP)
   clim_statssite_summary <- rbind (CLIMstats, clim_statssite_summary)
 }
+# 
+# overall_cc_mod <- ClimChange %>% 
+#   split(.$site) %>% 
+#   map(~lm(tmp_degrees_Celsius ~ plotdate, data = .))
+# 
+# overall_cc_site <- overall_cc_mod %>%
+#   map(summary) 
+# 
+# overall_cc_p <- overall_cc_mod %>%
+#   map(summary) %>%
+#   map_dbl(~.$coefficients[2,4]) %>% 
+#   as_tibble() %>%
+#   rename(pvalue_overalltemp = value) %>%
+#   mutate(site = names(overall_cc_mod))
+# 
+# overall_cc_slope <- overall_cc %>%
+#   map(summary) %>%
+#   map_dbl(~.$coefficients[2,1]) %>% 
+#   as_tibble() %>%
+#   rename(Value = value) %>%
+#   mutate(site = names(overall_cc_mod),
+#          )
+# 
+# overall_cc <- full_join(overall_cc_p, overall_cc_slope)
+# 
+# # ClimChange %>% 
+# #   filter(site == "sereng") %>%
+# #   ggplot(aes(x = plotdate, y = tmp_degrees_Celsius)) +
+# #   geom_point()
 
 climate_anom_df <- (dplyr::select(clim_statssite_summary, a,  sos1moTempF, sos2moTempF,sos3moTempF, sos4moTempF, 
                                     sos1moPrecipF, sos2moPrecipF,sos3moPrecipF, sos4moPrecipF, 
@@ -2307,6 +2350,7 @@ climate_anom_df <- (dplyr::select(clim_statssite_summary, a,  sos1moTempF, sos2m
   full_join(climate_anom) %>%
   mutate(includeCHANGE = ifelse(Stat == 'P value' & Value <= 0.05, 'sig', 'ns')) %>%
   filter(Stat != "F value")
+
 
 write_csv(climate_anom_df, 'climate_anom_df.csv')
 
@@ -2549,6 +2593,36 @@ for (i in c(1:nrow(longtermsites))) {
   anom_statssite_summary <- rbind (stats, anom_statssite_summary)
 }
 
+
+overall_cc_mod <- ClimChange %>%
+  split(.$site) %>%
+  map(~lm(tmp_degrees_Celsius ~ plotdate, data = .))
+
+overall_cc_site <- overall_cc_mod %>%
+  map(summary)
+
+overall_cc_p <- overall_cc_mod %>%
+  map(summary) %>%
+  map_dbl(~.$coefficients[2,4]) %>%
+  as_tibble() %>%
+  rename(OverallTemp_pvalue = value) %>%
+  mutate(site = names(overall_cc_mod))
+
+overall_cc_slope <- overall_cc_mod %>%
+  map(summary) %>%
+  map_dbl(~.$coefficients[2,1]) %>%
+  as_tibble() %>%
+  rename(OverallTemp_slope = value) %>%
+  mutate(site = names(overall_cc_mod),
+         )
+
+overall_cc <- full_join(overall_cc_p, overall_cc_slope)
+
+# ClimChange %>%
+#   filter(site == "sereng") %>%
+#   ggplot(aes(x = plotdate, y = tmp_degrees_Celsius)) +
+#   geom_point()
+
 anom_vs_climate <- anom_statssite_summary %>%
   transmute(sitenum2 = a,
     ChangeSOS_TempAnom_2mo_sos_pvalue = sos_sos2motemp_P, 
@@ -2568,6 +2642,7 @@ anom_vs_climate <- anom_statssite_summary %>%
          ChangeGSL_PrecipAnom_5mo_max_pvalue= gsl_max5moprecip_P,
          ChangeGSL_PrecipAnom_5mo_max_slope= gsl_max5moprecip_SLOPE) %>%
     full_join((longtermsites %>% select(-sitenum))) %>%
+  full_join(overall_cc) %>%
   select(-sitenum2)
 
 
