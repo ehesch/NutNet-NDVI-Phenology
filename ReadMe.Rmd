@@ -7,8 +7,8 @@ date: "`r format(Sys.time(), '%d %B %Y')`"
 #   pdf_document: default
 #   html_document: default
 output: 
-  # github_document:
-    pdf_document:
+  github_document:
+    # pdf_document:
     toc: true
 always_allow_html: true
 urlcolor: blue

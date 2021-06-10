@@ -1,14 +1,14 @@
 NutNet Phenology with NDVI
 ================
 Ellen Esch
-28 January 2021
+10 June 2021
 
 -   [Overview](#overview)
--   [Process weather & climate data](#process-weather-climate-data)
+-   [Process weather & climate data](#process-weather--climate-data)
 -   [Process site-specific info (from
     dropbox)](#process-site-specific-info-from-dropbox)
     -   [Nitrogen deposition data](#nitrogen-deposition-data)
-    -   [Biomass, richness, etc.](#biomass-richness-etc.)
+    -   [Biomass, richness, etc.](#biomass-richness-etc)
 -   [Process the Landsat NDVI data](#process-the-landsat-ndvi-data)
     -   [Collect raw data from Google Earth
         Engine](#collect-raw-data-from-google-earth-engine)
@@ -23,7 +23,7 @@ Ellen Esch
         dates](#process-temporal-trends-in-phenological-dates)
     -   [Process interannual weather variability + interannual
         phenological
-        anomolies](#process-interannual-weather-variability-interannual-phenological-anomolies)
+        anomolies](#process-interannual-weather-variability--interannual-phenological-anomolies)
 -   [Make final dataframes](#make-final-dataframes)
 -   [Start analysis](#start-analysis)
     -   [Overview](#overview-1)
@@ -31,7 +31,7 @@ Ellen Esch
         productivity](#ndvi-is-an-okay-predictor-of-productivity)
     -   [Temporal changes in phenology](#temporal-changes-in-phenology)
     -   [Interannual weather changes + phenological
-        anomalies](#interannual-weather-changes-phenological-anomalies)
+        anomalies](#interannual-weather-changes--phenological-anomalies)
     -   [PCAs](#pcas)
     -   [NutNet 2020 discussions](#nutnet-2020-discussions)
     -   [Make trendline of every site](#make-trendline-of-every-site)
@@ -198,6 +198,17 @@ well!!!
 `/Dropbox/NutNet data/sites-02-August-2019.csv`. NOT all of the sites
 have data in the `comb-by-plot-clim-soil-diversity-07-December-2020.csv`
 file (and so will subsequently be excluded).
+
+If lat/long of certain sites need to be updated, do so in the excel file
+below. Make sure to note which sites have been updated, or else Google
+Earth Engine will make your life (slightly) miserable. If you know which
+sites you need to run again, it’s much better.
+
+``` r
+process_site_lat_long <- FALSE
+```
+
+    ## [1] "Not updating site lat/longs"
 
 `GEE code not shown here due to length, but feel free to look at it in the markdown file`
 
@@ -399,13 +410,13 @@ Fraction sig. sites
 eos
 </td>
 <td style="text-align:right;">
-75
+78
 </td>
 <td style="text-align:right;">
-11
+14
 </td>
 <td style="text-align:right;">
-0.07
+0.09
 </td>
 </tr>
 <tr>
@@ -413,13 +424,13 @@ eos
 gsl
 </td>
 <td style="text-align:right;">
-67
+69
 </td>
 <td style="text-align:right;">
-19
+23
 </td>
 <td style="text-align:right;">
-0.14
+0.17
 </td>
 </tr>
 <tr>
@@ -427,13 +438,13 @@ gsl
 maxndvi
 </td>
 <td style="text-align:right;">
-40
+51
 </td>
 <td style="text-align:right;">
-46
+41
 </td>
 <td style="text-align:right;">
-0.57
+0.40
 </td>
 </tr>
 <tr>
@@ -441,13 +452,13 @@ maxndvi
 sos
 </td>
 <td style="text-align:right;">
-73
+74
 </td>
 <td style="text-align:right;">
-13
+18
 </td>
 <td style="text-align:right;">
-0.09
+0.12
 </td>
 </tr>
 </tbody>
@@ -478,24 +489,22 @@ See the sites which are included in this final analysis.
 
     ## [1] "not creating final data sets"
 
-    ##  [1] "abisko"    "amcamp"    "arch"      "azitwo"    "badlau"   
-    ##  [6] "bari"      "barta"     "bayr"      "bldr"      "bnbt"     
-    ## [11] "bnch"      "bogong"    "bttr"      "bunya"     "burrawan" 
-    ## [16] "burren"    "bynb"      "cbgb"      "cdcr"      "cdpt"     
-    ## [21] "chilcas"   "comp"      "cowi"      "derr"      "doane"    
-    ## [26] "elkh"      "elliot"    "elva"      "ethamc"    "frue"     
-    ## [31] "gilb"      "glac"      "glcr"      "hall"      "hart"     
-    ## [36] "hast"      "hero"      "hopl"      "jasp"      "jorn"     
-    ## [41] "kark"      "kbs"       "kibber"    "kidman"    "kilp"     
-    ## [46] "kiny"      "kirik"     "koffler"   "konz"      "lagoas"   
-    ## [51] "lake"      "lancaster" "lead"      "look"      "lubb"     
-    ## [56] "marc"      "mcdan"     "mcla"      "mitch"     "msla"     
-    ## [61] "msum"      "mtca"      "nilla"     "ping"      "pinj"     
-    ## [66] "potrok"    "sage"      "saline"    "sedg"      "sereng"   
-    ## [71] "sevi"      "sgs"       "shps"      "sier"      "smith"    
-    ## [76] "spv"       "summ"      "temple"    "ucsc"      "ukul"     
-    ## [81] "unc"       "uwo"       "valm"      "vargrass"  "vass"     
-    ## [86] "yarra"
+    ##  [1] "abisko"    "amcamp"    "arch"      "azitwo"    "badlau"    "bari"     
+    ##  [7] "barta"     "bayr"      "bldr"      "bnbt"      "bnch"      "bogong"   
+    ## [13] "bttr"      "bunya"     "burrawan"  "burren"    "bynb"      "cbgb"     
+    ## [19] "cdcr"      "cdpt"      "chilcas"   "comp"      "cowi"      "derr"     
+    ## [25] "doane"     "elkh"      "elliot"    "elva"      "ethamc"    "frue"     
+    ## [31] "gall"      "gilb"      "glac"      "glcr"      "hall"      "hart"     
+    ## [37] "hast"      "hero"      "hopl"      "hustai"    "jasp"      "jorn"     
+    ## [43] "kark"      "kbs"       "kibber"    "kidman"    "kilp"      "kiny"     
+    ## [49] "kirik"     "koffler"   "konz"      "lagoas"    "lake"      "lancaster"
+    ## [55] "lead"      "look"      "lubb"      "marc"      "mcdan"     "mcla"     
+    ## [61] "mitch"     "msla"      "msum"      "mtca"      "nilla"     "ovor"     
+    ## [67] "ping"      "pinj"      "potrok"    "sage"      "saline"    "sedg"     
+    ## [73] "sereng"    "sevi"      "sgs"       "shps"      "sier"      "sirsi"    
+    ## [79] "smith"     "spv"       "summ"      "sval"      "temple"    "thth"     
+    ## [85] "ucsc"      "ukul"      "unc"       "uwo"       "valm"      "vargrass" 
+    ## [91] "vass"      "yarra"
 
 # Start analysis
 
@@ -536,7 +545,7 @@ North America
 Europe
 </td>
 <td style="text-align:right;">
-15
+18
 </td>
 </tr>
 <tr>
@@ -545,6 +554,14 @@ Australia
 </td>
 <td style="text-align:right;">
 13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Asia
+</td>
+<td style="text-align:right;">
+6
 </td>
 </tr>
 <tr>
@@ -561,14 +578,6 @@ Africa
 </td>
 <td style="text-align:right;">
 4
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-Asia
-</td>
-<td style="text-align:right;">
-3
 </td>
 </tr>
 </tbody>
@@ -590,7 +599,7 @@ N sites
 mesic grassland
 </td>
 <td style="text-align:right;">
-12
+13
 </td>
 </tr>
 <tr>
@@ -627,6 +636,14 @@ old field
 </tr>
 <tr>
 <td style="text-align:left;">
+tundra grassland
+</td>
+<td style="text-align:right;">
+6
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
 alpine grassland
 </td>
 <td style="text-align:right;">
@@ -643,7 +660,7 @@ montane grassland
 </tr>
 <tr>
 <td style="text-align:left;">
-tundra grassland
+NA
 </td>
 <td style="text-align:right;">
 4
@@ -715,14 +732,6 @@ shrub steppe
 </tr>
 <tr>
 <td style="text-align:left;">
-NA
-</td>
-<td style="text-align:right;">
-2
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
 cerrado
 </td>
 <td style="text-align:right;">
@@ -732,6 +741,14 @@ cerrado
 <tr>
 <td style="text-align:left;">
 grassland steppe
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+heathland
 </td>
 <td style="text-align:right;">
 1
@@ -755,7 +772,7 @@ Here is a map of the sites:
 Also there has been a range of phenological change and change in maximum
 NDVI (from site-level means). See fig `FigureS4_histograms.pdf`
 
-![](ReadMe_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
+![](ReadMe_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
 ## NDVI is an okay predictor of productivity
 
@@ -787,11 +804,11 @@ compared with the following models:
 4.  no fixed intercept; ANPP \~ maxNDVI
 
 Model 4 had the lowest AIC score, and yields the following relationship
-with a r-squared value of `0.2691894`:
+with a r-squared value of `0.2500424`:
 
-ANPP = `-119.3883112` + maxNDVI \* `785.0950005`
+ANPP = `-94.7480708` + maxNDVI \* `753.601144`
 
-![](ReadMe_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+![](ReadMe_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
 ## Temporal changes in phenology
 
@@ -840,31 +857,31 @@ GS Length p-value
 site
 </td>
 <td style="text-align:right;">
-85
+91
 </td>
 <td style="text-align:right;">
-19.76
+4172.03
+</td>
+<td style="text-align:right;">
+0.000
+</td>
+<td style="text-align:right;">
+28.32
 </td>
 <td style="text-align:right;">
 1.000
 </td>
 <td style="text-align:right;">
-27.34
-</td>
-<td style="text-align:right;">
-1.000
-</td>
-<td style="text-align:right;">
-216.38
+259.59
 </td>
 <td style="text-align:right;">
 0
 </td>
 <td style="text-align:right;">
-34.08
+2427.96
 </td>
 <td style="text-align:right;">
-1.000
+0.000
 </td>
 </tr>
 <tr>
@@ -875,28 +892,28 @@ gs
 1
 </td>
 <td style="text-align:right;">
-4.12
+2.58
 </td>
 <td style="text-align:right;">
-0.042
+0.108
 </td>
 <td style="text-align:right;">
-1.51
+0.06
 </td>
 <td style="text-align:right;">
-0.219
+0.801
 </td>
 <td style="text-align:right;">
-58.60
+59.76
 </td>
 <td style="text-align:right;">
 0
 </td>
 <td style="text-align:right;">
-3.82
+1.03
 </td>
 <td style="text-align:right;">
-0.051
+0.311
 </td>
 </tr>
 <tr>
@@ -904,28 +921,28 @@ gs
 site:gs
 </td>
 <td style="text-align:right;">
-85
+91
 </td>
 <td style="text-align:right;">
-167.03
-</td>
-<td style="text-align:right;">
-0.000
-</td>
-<td style="text-align:right;">
-139.06
+183.98
 </td>
 <td style="text-align:right;">
 0.000
 </td>
 <td style="text-align:right;">
-264.98
+174.02
+</td>
+<td style="text-align:right;">
+0.000
+</td>
+<td style="text-align:right;">
+282.66
 </td>
 <td style="text-align:right;">
 0
 </td>
 <td style="text-align:right;">
-215.52
+226.60
 </td>
 <td style="text-align:right;">
 0.000
@@ -934,7 +951,7 @@ site:gs
 </tbody>
 </table>
 
-![](ReadMe_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+![](ReadMe_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
 ## Interannual weather changes + phenological anomalies
 
@@ -973,7 +990,7 @@ Temp anamoly 2mo prior to GU
 1
 </td>
 <td style="text-align:right;">
-22.32
+20.50
 </td>
 <td style="text-align:right;">
 0.000
@@ -990,7 +1007,7 @@ Precip anamoly 2mo prior to GU
 1
 </td>
 <td style="text-align:right;">
-22.17
+20.85
 </td>
 <td style="text-align:right;">
 0.000
@@ -1007,10 +1024,10 @@ Temp anamoly of 5mo GS
 1
 </td>
 <td style="text-align:right;">
-2.31
+0.72
 </td>
 <td style="text-align:right;">
-0.128
+0.397
 </td>
 </tr>
 <tr>
@@ -1024,7 +1041,7 @@ Precip anamoly of 5mo GS
 1
 </td>
 <td style="text-align:right;">
-73.89
+81.98
 </td>
 <td style="text-align:right;">
 0.000
@@ -1041,10 +1058,10 @@ Temp anamoly of 5mo GS
 1
 </td>
 <td style="text-align:right;">
-2.92
+11.55
 </td>
 <td style="text-align:right;">
-0.087
+0.001
 </td>
 </tr>
 <tr>
@@ -1058,7 +1075,7 @@ Precip anamoly of 5mo GS
 1
 </td>
 <td style="text-align:right;">
-77.43
+85.94
 </td>
 <td style="text-align:right;">
 0.000
@@ -1067,7 +1084,7 @@ Precip anamoly of 5mo GS
 </tbody>
 </table>
 
-![](ReadMe_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](ReadMe_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ## PCAs
 
@@ -1075,10 +1092,10 @@ Could be a useful part of the fishing expedition…
 
 ![](ReadMe_files/figure-gfm/PCAs-1.png)<!-- -->![](ReadMe_files/figure-gfm/PCAs-2.png)<!-- -->
 
-In looking at sites which have *most* site-level data, there are `84`
+In looking at sites which have *most* site-level data, there are `88`
 sites.
 
-If we want to look at soil nutrient levels, there are only `53` sites
+If we want to look at soil nutrient levels, there are only `58` sites
 with complete data.
 
 ## NutNet 2020 discussions
