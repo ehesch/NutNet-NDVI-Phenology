@@ -45,9 +45,9 @@ localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_NutNet phenology/pheno_lo
 
 process_raw_ndvi <- FALSE #TRUE
 
-merge_climate_ndvi <- FALSE #TRUE
+merge_climate_ndvi <- TRUE #TRUE
 
-create_final_df <- FALSE #if this is TRUE, you will need to connect to dropbox
+create_final_df <- TRUE #if this is TRUE, you will need to connect to dropbox
 ```
 
 ```{r moresetup, echo=F, include = F}
@@ -2593,7 +2593,7 @@ for (i in c(1:nrow(longtermsites))) {
   anom_statssite_summary <- rbind (stats, anom_statssite_summary)
 }
 
-
+# temp
 overall_cc_mod <- ClimChange %>%
   split(.$site) %>%
   map(~lm(tmp_degrees_Celsius ~ plotdate, data = .))
@@ -2616,7 +2616,32 @@ overall_cc_slope <- overall_cc_mod %>%
   mutate(site = names(overall_cc_mod),
          )
 
-overall_cc <- full_join(overall_cc_p, overall_cc_slope)
+##precip
+overall_cc_mod_precip <- ClimChange %>%
+  split(.$site) %>%
+  map(~lm(`pre_mm/month` ~ plotdate, data = .))
+
+overall_cc_site_precip <- overall_cc_mod_precip %>%
+  map(summary)
+
+overall_cc_p_precip <- overall_cc_mod_precip %>%
+  map(summary) %>%
+  map_dbl(~.$coefficients[2,4]) %>%
+  as_tibble() %>%
+  rename(OverallPrecip_pvalue = value) %>%
+  mutate(site = names(overall_cc_mod_precip))
+
+overall_cc_slope_precip <- overall_cc_mod_precip %>%
+  map(summary) %>%
+  map_dbl(~.$coefficients[2,1]) %>%
+  as_tibble() %>%
+  rename(OverallPrecip_slope = value) %>%
+  mutate(site = names(overall_cc_mod_precip),
+         )
+
+overall_cc <- full_join(overall_cc_p, overall_cc_slope) %>%
+  full_join(overall_cc_p_precip) %>%
+  full_join(overall_cc_slope_precip)
 
 # ClimChange %>%
 #   filter(site == "sereng") %>%

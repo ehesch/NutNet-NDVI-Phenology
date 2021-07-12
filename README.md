@@ -1,7 +1,7 @@
 NutNet Phenology with NDVI
 ================
 Ellen Esch
-10 June 2021
+12 July 2021
 
 -   [Overview](#overview)
 -   [Process weather & climate data](#process-weather--climate-data)
@@ -59,9 +59,9 @@ localdir <- "/Users/ellen/Desktop/Ellen/Guelph/Project_NutNet phenology/pheno_lo
 
 process_raw_ndvi <- FALSE #TRUE
 
-merge_climate_ndvi <- FALSE #TRUE
+merge_climate_ndvi <- TRUE #TRUE
 
-create_final_df <- FALSE #if this is TRUE, you will need to connect to dropbox
+create_final_df <- TRUE #if this is TRUE, you will need to connect to dropbox
 ```
 
 # Process weather & climate data
@@ -149,7 +149,7 @@ To connect on-the-ground biomass measurements with NDVI, also extract
 the average biomass (ANPP) for all control plots for all years
 available.
 
-    ## [1] "not creating final data sets"
+![](ReadMe_files/figure-gfm/siteinfo-1.png)<!-- -->
 
 # Process the Landsat NDVI data
 
@@ -352,7 +352,22 @@ fit a nice trend/too few images during growing season), site never
 “greened-up” threshold during a given year (important esp for
 Mediterranean sites, and probably other reasons.
 
-    ## [1] "not creating final data sets"
+    ##  [1] "abisko"    "amcamp"    "arch"      "azitwo"    "badlau"    "bari"     
+    ##  [7] "barta"     "bayr"      "bldr"      "bnbt"      "bnch"      "bogong"   
+    ## [13] "bttr"      "bunya"     "burrawan"  "burren"    "bynb"      "cbgb"     
+    ## [19] "cdcr"      "cdpt"      "chilcas"   "comp"      "cowi"      "derr"     
+    ## [25] "doane"     "elkh"      "elliot"    "elva"      "ethamc"    "frue"     
+    ## [31] "gall"      "gilb"      "glac"      "glcr"      "hall"      "hart"     
+    ## [37] "hast"      "hero"      "hopl"      "hustai"    "jasp"      "jorn"     
+    ## [43] "kark"      "kbs"       "kibber"    "kidman"    "kilp"      "kiny"     
+    ## [49] "kirik"     "koffler"   "konz"      "lagoas"    "lake"      "lancaster"
+    ## [55] "lead"      "look"      "lubb"      "marc"      "mcdan"     "mcla"     
+    ## [61] "mitch"     "msla"      "msum"      "mtca"      "nilla"     "ovor"     
+    ## [67] "ping"      "pinj"      "potrok"    "sage"      "saline"    "sedg"     
+    ## [73] "sereng"    "sevi"      "sgs"       "shps"      "sier"      "sirsi"    
+    ## [79] "smith"     "spv"       "summ"      "sval"      "temple"    "thth"     
+    ## [85] "ucsc"      "ukul"      "unc"       "uwo"       "valm"      "vargrass" 
+    ## [91] "vass"      "yarra"
 
 # Merge climate data with phenology data
 
@@ -374,18 +389,12 @@ This plot simply shows sites which have seen a significant trend in
 temperatures and precipitation over time within a 2 month window
 preceding the site-specific typical green-up date.
 
-    ## [1] "Not merging weather and ndvi"
-
 ![](ReadMe_files/figure-gfm/temptrends-1.png)<!-- -->![](ReadMe_files/figure-gfm/temptrends-2.png)<!-- -->
 
 ## Process temporal trends in phenological dates
 
 -   Similarly, we want to see if sites have seen significant changes in
     phenological dates over time.
-
-<!-- -->
-
-    ## [1] "Not merging weather and ndvi"
 
 <table>
 <thead>
@@ -469,10 +478,6 @@ sos
 -   Also interesting to look at yearly deviations in GS length + climate
     anomaly
 
-<!-- -->
-
-    ## [1] "Not merging weather and ndvi"
-
 # Make final dataframes
 
 `df_annual` contains a row for every growing season at each site. It
@@ -486,8 +491,6 @@ Please see excel sheet for metadata/column descriptions
 These two data frames can be combined into a `df_merge`.
 
 See the sites which are included in this final analysis.
-
-    ## [1] "not creating final data sets"
 
     ##  [1] "abisko"    "amcamp"    "arch"      "azitwo"    "badlau"    "bari"     
     ##  [7] "barta"     "bayr"      "bldr"      "bnbt"      "bnch"      "bogong"   
